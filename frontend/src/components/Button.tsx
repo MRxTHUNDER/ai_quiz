@@ -7,9 +7,10 @@ interface ButtonProps {
   onClick?: () => void;
   className?: string;
   href?: string;
+  type?: 'button' | 'submit' | 'reset';
 }
 
-function Button({ children, variant = 'primary', size = 'md', onClick, className = '', href }: ButtonProps) {
+function Button({ children, variant = 'primary', size = 'md', onClick, className = '', href, type = 'button' }: ButtonProps) {
   const baseClasses = 'inline-flex items-center justify-center font-medium rounded-lg transition-all duration-200 transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-offset-2';
   
   const variantClasses = {
@@ -35,7 +36,7 @@ function Button({ children, variant = 'primary', size = 'md', onClick, className
   }
 
   return (
-    <button onClick={onClick} className={classes}>
+    <button type={type} onClick={onClick} className={classes}>
       {children}
     </button>
   );

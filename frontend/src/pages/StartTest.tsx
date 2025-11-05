@@ -1,127 +1,144 @@
-import React, { useState } from 'react';
-import { 
-  Calculator, 
-  Atom, 
-  BookOpen, 
-  Clock, 
-  Target, 
+import { useMemo, useState } from "react";
+import {
+  Calculator,
+  Atom,
+  BookOpen,
   Calendar,
   TrendingUp,
-  Award,
-  User,
-  Eye,
   Beaker,
   Heart,
-  Microscope,
   History,
   Palette,
-  Monitor
-} from 'lucide-react';
-import Button from '../components/Button';
-import SelectionCard from '../components/SelectionCard';
-import StatCard from '../components/StatCard';
-import QuizCard from '../components/QuizCard';
-import SubjectCard from '../components/SubjectCard';
+  Monitor,
+  GraduationCap,
+  Landmark,
+  Scale,
+  Languages,
+  Clock,
+} from "lucide-react";
+import Button from "../components/Button";
+import SelectionCard from "../components/SelectionCard";
+import StatCard from "../components/StatCard";
+import QuizCard from "../components/QuizCard";
+import SubjectCard from "../components/SubjectCard";
+import { ENTRANCE_EXAMS, ENTRANCE_EXAM_BY_ID } from "../lib/exams";
 
 function StartTest() {
-  const [currentView, setCurrentView] = useState<'setup' | 'dashboard'>('setup');
-  const [selectedSubject, setSelectedSubject] = useState<string>('');
-  const [selectedDuration, setSelectedDuration] = useState<string>('');
-  const [selectedDifficulty, setSelectedDifficulty] = useState<string>('');
+  const [currentView, setCurrentView] = useState<"setup" | "dashboard">(
+    "setup"
+  );
+  const [selectedExamId, setSelectedExamId] = useState<string>("");
+  const [selectedSubject, setSelectedSubject] = useState<string>("");
 
-  if (currentView === 'setup') {
+  const examIconMap: Record<string, JSX.Element> = {
+    CUET: <Languages className="h-8 w-8" />,
+    JEE: <Atom className="h-8 w-8" />,
+    NEET: <Heart className="h-8 w-8" />,
+    CLAT: <Scale className="h-8 w-8" />,
+    CAT: <Calculator className="h-8 w-8" />,
+    CET: <Landmark className="h-8 w-8" />,
+  };
+
+  type SubjectOption = { key: string; label: string; minutes?: number };
+
+  const subjectOptions: SubjectOption[] = useMemo(() => {
+    if (!selectedExamId) return [];
+    const exam =
+      ENTRANCE_EXAM_BY_ID[selectedExamId as keyof typeof ENTRANCE_EXAM_BY_ID];
+    if (!exam || !exam.sections) return [];
+
+    const options: SubjectOption[] = [];
+    exam.sections.forEach((section) => {
+      if (section.items && section.items.length > 0) {
+        section.items.forEach((item) => {
+          options.push({
+            key: `${section.name}:${item}`,
+            label: item,
+            minutes: section.durationMinutes,
+          });
+        });
+      } else {
+        options.push({
+          key: section.name,
+          label: section.name,
+          minutes: section.durationMinutes,
+        });
+      }
+    });
+    return options;
+  }, [selectedExamId]);
+
+  if (currentView === "setup") {
     return (
       <div className="min-h-screen bg-gray-50 py-16">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           {/* Header */}
           <div className="text-center mb-12">
-            <h1 className="text-4xl font-bold text-gray-900 mb-4">Setup Your Next Test</h1>
+            <h1 className="text-4xl font-bold text-gray-900 mb-4">
+              Setup Your Next Test
+            </h1>
             <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-              Choose your subject, preferred duration, and challenge level to begin your personalized quiz experience.
+              Choose your subject, preferred duration, and challenge level to
+              begin your personalized quiz experience.
             </p>
           </div>
 
-          {/* Subject Selection */}
+          {/* Entrance Exam Selection */}
           <div className="mb-12">
-            <h2 className="text-2xl font-bold text-gray-900 mb-8 text-center">1. Select a Subject</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <SelectionCard
-                icon={<Calculator className="h-8 w-8" />}
-                title="Math"
-                isSelected={selectedSubject === 'math'}
-                onClick={() => setSelectedSubject('math')}
-              />
-              <SelectionCard
-                icon={<Atom className="h-8 w-8" />}
-                title="Science"
-                isSelected={selectedSubject === 'science'}
-                onClick={() => setSelectedSubject('science')}
-              />
-              <SelectionCard
-                icon={<BookOpen className="h-8 w-8" />}
-                title="English"
-                isSelected={selectedSubject === 'english'}
-                onClick={() => setSelectedSubject('english')}
-              />
+            <h2 className="text-2xl font-bold text-gray-900 mb-8 text-center">
+              1. Select an Entrance Exam
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6">
+              {ENTRANCE_EXAMS.map((exam) => (
+                <SelectionCard
+                  key={exam.id}
+                  icon={
+                    examIconMap[exam.id] ?? (
+                      <GraduationCap className="h-8 w-8" />
+                    )
+                  }
+                  title={`${exam.name}`}
+                  isSelected={selectedExamId === exam.id}
+                  onClick={() => {
+                    setSelectedExamId(exam.id);
+                    setSelectedSubject("");
+                  }}
+                />
+              ))}
             </div>
           </div>
 
-          {/* Duration Selection */}
-          <div className="mb-12">
-            <h2 className="text-2xl font-bold text-gray-900 mb-8 text-center">2. Choose Test Duration</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <SelectionCard
-                icon={<Clock className="h-8 w-8" />}
-                title="15 Minutes"
-                isSelected={selectedDuration === '15'}
-                onClick={() => setSelectedDuration('15')}
-              />
-              <SelectionCard
-                icon={<Target className="h-8 w-8" />}
-                title="30 Minutes"
-                isSelected={selectedDuration === '30'}
-                onClick={() => setSelectedDuration('30')}
-              />
-              <SelectionCard
-                icon={<TrendingUp className="h-8 w-8" />}
-                title="60 Minutes"
-                isSelected={selectedDuration === '60'}
-                onClick={() => setSelectedDuration('60')}
-              />
+          {/* Subject Selection for the chosen exam */}
+          {selectedExamId && (
+            <div className="mb-12">
+              <h2 className="text-2xl font-bold text-gray-900 mb-8 text-center">
+                2. Select a Subject
+              </h2>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6">
+                {subjectOptions.map((opt) => (
+                  <SelectionCard
+                    key={opt.key}
+                    icon={<BookOpen className="h-8 w-8" />}
+                    title={
+                      opt.minutes
+                        ? `${opt.label} (${opt.minutes} min)`
+                        : opt.label
+                    }
+                    isSelected={selectedSubject === opt.key}
+                    onClick={() => setSelectedSubject(opt.key)}
+                  />
+                ))}
+              </div>
             </div>
-          </div>
-
-          {/* Difficulty Selection */}
-          <div className="mb-12">
-            <h2 className="text-2xl font-bold text-gray-900 mb-8 text-center">3. Set Difficulty Level</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <SelectionCard
-                icon={<Eye className="h-8 w-8" />}
-                title="Easy"
-                isSelected={selectedDifficulty === 'easy'}
-                onClick={() => setSelectedDifficulty('easy')}
-              />
-              <SelectionCard
-                icon={<TrendingUp className="h-8 w-8" />}
-                title="Medium"
-                isSelected={selectedDifficulty === 'medium'}
-                onClick={() => setSelectedDifficulty('medium')}
-              />
-              <SelectionCard
-                icon={<Award className="h-8 w-8" />}
-                title="Hard"
-                isSelected={selectedDifficulty === 'hard'}
-                onClick={() => setSelectedDifficulty('hard')}
-              />
-            </div>
-          </div>
+          )}
 
           {/* Start Test Button */}
           <div className="text-center">
-            <Button 
-              size="lg" 
-              onClick={() => setCurrentView('dashboard')}
+            <Button
+              size="lg"
+              onClick={() => setCurrentView("dashboard")}
               className="px-12"
+              disabled={!selectedExamId || !selectedSubject}
             >
               Start Test
             </Button>
@@ -137,9 +154,12 @@ function StartTest() {
         {/* Welcome Section */}
         <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-2xl p-8 mb-8">
           <div className="text-center">
-            <h1 className="text-3xl font-bold text-gray-900 mb-4">Welcome, Alex Johnson!</h1>
+            <h1 className="text-3xl font-bold text-gray-900 mb-4">
+              Welcome, Alex Johnson!
+            </h1>
             <p className="text-gray-600 mb-6">
-              Dive into new quizzes, track your progress, and master your subjects with Quiz Genius AI.
+              Dive into new quizzes, track your progress, and master your
+              subjects with Quiz Genius AI.
             </p>
             <Button className="bg-green-600 hover:bg-green-700">
               Start New Test
@@ -155,15 +175,19 @@ function StartTest() {
             <div className="bg-white p-6 rounded-xl border border-gray-100">
               <div className="text-center">
                 <div className="relative inline-block mb-4">
-                  <img 
+                  <img
                     src="https://images.pexels.com/photos/2182970/pexels-photo-2182970.jpeg?auto=compress&cs=tinysrgb&w=300&h=300&dpr=1"
                     alt="Alex Johnson"
                     className="w-20 h-20 rounded-full object-cover"
                   />
                   <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-green-500 rounded-full border-2 border-white"></div>
                 </div>
-                <h3 className="text-lg font-semibold text-blue-600 mb-1">Alex Johnson</h3>
-                <p className="text-sm text-gray-600 mb-4">alex.johnson@example.com</p>
+                <h3 className="text-lg font-semibold text-blue-600 mb-1">
+                  Alex Johnson
+                </h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  alex.johnson@example.com
+                </p>
                 <div className="grid grid-cols-2 gap-4 mb-4">
                   <div className="text-center">
                     <div className="text-2xl font-bold text-gray-900">42</div>
@@ -216,7 +240,9 @@ function StartTest() {
 
         {/* Recent Quizzes */}
         <div className="mb-12">
-          <h2 className="text-2xl font-bold text-gray-900 mb-8">Recent Quizzes</h2>
+          <h2 className="text-2xl font-bold text-gray-900 mb-8">
+            Recent Quizzes
+          </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
             <QuizCard
               subject="Mathematics"
@@ -267,7 +293,9 @@ function StartTest() {
 
         {/* Explore Subjects */}
         <div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-8">Explore Subjects</h2>
+          <h2 className="text-2xl font-bold text-gray-900 mb-8">
+            Explore Subjects
+          </h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
             <SubjectCard
               icon={<Calculator className="h-8 w-8" />}
