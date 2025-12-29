@@ -20,7 +20,7 @@ function AdminLogin() {
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     await login({ email, password, adminPassword });
-    navigate("/dashboard");
+    navigate("/upload-pdf");
   };
 
   return (

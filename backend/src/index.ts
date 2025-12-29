@@ -22,7 +22,6 @@ ConnectToDb();
 
 const PORT = process.env.PORT || "8080";
 
-// Parse FRONTEND_URL - can be comma-separated list
 const productionOrigins = process.env.FRONTEND_URL
   ? process.env.FRONTEND_URL.split(",").map((url) => url.trim())
   : [];
