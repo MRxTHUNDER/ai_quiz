@@ -8,11 +8,11 @@ import { useEffect } from "react";
 import Layout from "./layouts/Layout";
 import AdminLogin from "@/pages/AdminLogin";
 import AdminSignup from "@/pages/AdminSignup";
-import UploadPdf from "@/pages/UploadPdf";
 import ExamsManagement from "@/pages/ExamsManagement";
 import UsersManagement from "@/pages/UsersManagement";
 import UserDetails from "@/pages/UserDetails";
 import { useAuthStore } from "@/store/useAuthStore";
+import Questions from "./pages/Questions";
 
 function Protected({ children }: { children: React.ReactNode }) {
   const authUser = useAuthStore((s) => s.authUser);
@@ -34,22 +34,22 @@ function App() {
   return (
     <Router>
       <Routes>
+        {/* Public routes without Layout */}
+        <Route path="/login" element={<AdminLogin />} />
+        <Route path="/signup" element={<AdminSignup />} />
+
+        {/* Protected routes with Layout */}
         <Route
           path="/*"
           element={
             <Layout>
               <Routes>
+                <Route path="" element={<Navigate to="/questions" replace />} />
                 <Route
-                  path=""
-                  element={<Navigate to="/upload-pdf" replace />}
-                />
-                <Route path="login" element={<AdminLogin />} />
-                <Route path="signup" element={<AdminSignup />} />
-                <Route
-                  path="upload-pdf"
+                  path="questions"
                   element={
                     <Protected>
-                      <UploadPdf />
+                      <Questions />
                     </Protected>
                   }
                 />

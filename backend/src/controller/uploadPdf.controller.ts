@@ -251,3 +251,121 @@ export const TagPDF = async (req: Request, res: Response) => {
     });
   }
 };
+
+/**
+ * Generate questions directly without PDF
+ * POST /upload/generate-direct
+ */
+export const GenerateQuestionsDirect = async (req: Request, res: Response) => {
+  try {
+    const { entranceExamId, subjectId, topic, numQuestions } = req.body;
+    const userId = req.userId;
+
+    if (!entranceExamId || !subjectId) {
+      res.status(400).json({
+        message: "entranceExamId and subjectId are required",
+      });
+      return;
+    }
+
+    if (!userId) {
+      res.status(401).json({
+        message: "User not authenticated",
+      });
+      return;
+    }
+
+    const finalNumQuestions = numQuestions || 50;
+
+    // Find or create subject by name
+    let subject = await Subject.findOne({
+      subjectName: subjectId,
+    });
+
+    if (!subject) {
+      subject = await Subject.create({
+        subjectName: subjectId,
+        testDuration: 60,
+      });
+    }
+
+    // Find entrance exam
+    let entranceExam = await EntranceExam.findOne({
+      $or: [
+        { entranceExamId: entranceExamId },
+        { entranceExamName: entranceExamId },
+      ],
+    });
+
+    if (!entranceExam) {
+      const examNameMap: Record<string, string> = {
+        CUET: "CUET",
+        CET: "CET",
+        JEE: "JEE Main",
+        NEET: "NEET",
+        CLAT: "CLAT",
+        CAT: "CAT",
+      };
+      const examName = examNameMap[entranceExamId] || entranceExamId;
+
+      entranceExam = await EntranceExam.create({
+        entranceExamName: examName,
+        entranceExamId: entranceExamId,
+        durationMinutes: 180,
+        subjects: [],
+        markingScheme: {
+          correctMarks: 4,
+          incorrectMarks: -1,
+          unansweredMarks: 0,
+        },
+      });
+    }
+
+    console.log(
+      `Generating ${finalNumQuestions} questions for ${subject.subjectName} (${
+        entranceExam.entranceExamName
+      })${topic ? ` - Topic: ${topic}` : ""}`
+    );
+
+    // Generate questions using subject knowledge
+    const questions = await GenerateQuestionsFromSubjectKnowledge(
+      subject.subjectName,
+      entranceExam.entranceExamName,
+      finalNumQuestions,
+      topic || undefined
+    );
+
+    let generatedQuestions = null;
+
+    if (questions && Array.isArray(questions) && questions.length > 0) {
+      // Format questions for database
+      const formattedQuestions = questions.map((q: any) => ({
+        questionsText: q.questionsText,
+        Options: q.Options,
+        correctOption: q.correctOption,
+        SubjectId: subject._id,
+      }));
+
+      // Save questions to database
+      generatedQuestions = await QuestionModel.insertMany(formattedQuestions);
+      console.log(
+        `Successfully generated and saved ${generatedQuestions.length} questions`
+      );
+    } else {
+      console.warn("No questions generated from AI service");
+    }
+
+    res.status(201).json({
+      status: "Success",
+      message: "Questions generated successfully",
+      questionsGenerated: generatedQuestions?.length || 0,
+      questions: generatedQuestions || undefined,
+    });
+  } catch (error) {
+    console.error("Error generating questions:", error);
+    res.status(500).json({
+      message: "Error generating questions",
+      error,
+    });
+  }
+};

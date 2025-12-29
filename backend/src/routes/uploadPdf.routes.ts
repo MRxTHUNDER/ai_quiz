@@ -1,5 +1,9 @@
 import express from "express";
-import { UploadSubjectPDF, TagPDF } from "../controller/uploadPdf.controller";
+import {
+  UploadSubjectPDF,
+  TagPDF,
+  GenerateQuestionsDirect,
+} from "../controller/uploadPdf.controller";
 import { adminAuthMiddleware } from "../middleware/middleware";
 
 export const UploadPdfRouter = express.Router();
@@ -9,3 +13,10 @@ UploadPdfRouter.post("/presigned-url", adminAuthMiddleware, UploadSubjectPDF);
 
 // Tag PDF with subject and entrance exam (admin only)
 UploadPdfRouter.post("/tag", adminAuthMiddleware, TagPDF);
+
+// Generate questions directly without PDF (admin only)
+UploadPdfRouter.post(
+  "/generate-direct",
+  adminAuthMiddleware,
+  GenerateQuestionsDirect
+);

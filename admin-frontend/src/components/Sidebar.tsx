@@ -9,8 +9,8 @@ const navigation = [
     icon: Users,
   },
   {
-    name: "Upload PDF",
-    href: "/upload-pdf",
+    name: "Questions",
+    href: "/questions",
     icon: Upload,
   },
   {
@@ -29,7 +29,10 @@ export function Sidebar() {
         {navigation.map((item) => {
           const isActive =
             location.pathname === item.href ||
-            (item.href === "/users" && location.pathname.startsWith("/users"));
+            (item.href === "/users" &&
+              location.pathname.startsWith("/users")) ||
+            (item.href === "/questions" &&
+              location.pathname.startsWith("/questions"));
           return (
             <Link
               key={item.name}

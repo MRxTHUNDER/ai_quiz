@@ -10,7 +10,7 @@ const userPdfUploadSchema = new Schema(
     pdfId: {
       type: Schema.Types.ObjectId,
       ref: "Pdf",
-      required: true,
+      required: false, // Optional - for direct generation without PDF
     },
     uploadedAt: {
       type: Date,

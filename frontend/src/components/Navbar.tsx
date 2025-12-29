@@ -23,7 +23,7 @@ function Navbar() {
   ];
 
   // Additional nav items only for authenticated users
-  const authNavItems = [{ name: "Upload PDF", path: "/upload-pdf" }];
+  const authNavItems = [{ name: "Generate Questions", path: "/upload-pdf" }];
 
   const isActive = (path: string) => location.pathname === path;
 

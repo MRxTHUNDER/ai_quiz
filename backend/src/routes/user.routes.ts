@@ -24,6 +24,7 @@ import {
   CheckUploadQuota,
   GetUserPresignedUrl,
   TagUserPDF,
+  GenerateQuestionsDirectUser,
 } from "../controller/userPdfUpload.controller";
 import { userAuthMiddleware } from "../middleware/middleware";
 
@@ -71,5 +72,14 @@ UserRouter.get("/test-history", userAuthMiddleware, GetTestHistory);
 
 // User PDF upload endpoints (with quota limit) - Require authentication
 UserRouter.get("/upload/check-quota", userAuthMiddleware, CheckUploadQuota);
-UserRouter.post("/upload/presigned-url", userAuthMiddleware, GetUserPresignedUrl);
+UserRouter.post(
+  "/upload/presigned-url",
+  userAuthMiddleware,
+  GetUserPresignedUrl
+);
 UserRouter.post("/upload/tag", userAuthMiddleware, TagUserPDF);
+UserRouter.post(
+  "/upload/generate-direct",
+  userAuthMiddleware,
+  GenerateQuestionsDirectUser
+);

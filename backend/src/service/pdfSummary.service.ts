@@ -6,63 +6,72 @@ dotenv.config();
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-/**
- * Extract topics from PDF (lightweight operation)
- * Returns array of topic strings
- */
-export const extractTopicsFromPDF = async (
+export const extractTopicsAndSummaryFromPDF = async (
   fileUrl: string
-): Promise<string[]> => {
+): Promise<{ topics: string[]; summaryText: string; keywords: string[] }> => {
   try {
     const prompt = `
-Analyze this PDF and extract the main topics/chapters covered.
+You are an educational content analyzer. Analyze this PDF document and provide:
+
+1. Main topics/chapters covered (3-10 topics)
+2. A comprehensive summary covering all key concepts, formulas, definitions, and important points
+3. Key keywords/terms (5-10 keywords)
 
 INSTRUCTIONS:
-1. List 3-10 main topics or chapters covered in this document
-2. Be specific but concise (e.g., "Differential Calculus", "Newton's Laws of Motion", "Organic Chemistry - Aldehydes")
-3. Return ONLY a JSON array of topic strings
-4. No markdown, no explanations, just the JSON array
+- Topics should be specific but concise (e.g., "Differential Calculus", "Newton's Laws of Motion")
+- Summary should be detailed enough to generate diverse exam questions from
+- Include specific facts, numbers, dates, formulas that might appear in exam questions
+- Organize summary by topic/chapter for clarity
+- Include important examples or problem-solving approaches
 
-EXAMPLE OUTPUT:
-["Differential Calculus", "Integration Techniques", "Applications of Derivatives"]
+IMPORTANT: Return ONLY valid JSON in this exact format:
+{
+  "topics": ["topic1", "topic2", "topic3"],
+  "summaryText": "Your comprehensive summary here...",
+  "keywords": ["keyword1", "keyword2", "keyword3"]
+}
 
-Return ONLY the JSON array.
+No markdown code blocks, no explanations, just the JSON object.
 `;
 
-    const response = await client.chat.completions.create({
-      model: process.env.OPENAI_MODEL || "gpt-4",
-      messages: [
+    const response = await client.responses.create({
+      model: process.env.OPENAI_MODEL || "gpt-4o",
+      input: [
         {
           role: "user",
           content: [
-            { type: "text", text: prompt },
+            { type: "input_text", text: prompt },
             {
-              type: "image_url",
-              image_url: { url: fileUrl },
+              type: "input_file",
+              file_url: fileUrl,
             },
           ],
         },
       ],
-      max_tokens: 500,
       temperature: 0.3,
     });
 
-    const content = response.choices[0]?.message?.content || "[]";
+    const content = response.output_text || "{}";
     const cleanedContent = content.trim().replace(/```json\n?|\n?```/g, "");
-    const topics = JSON.parse(cleanedContent);
+    const result = JSON.parse(cleanedContent);
 
-    console.log(`Extracted ${topics.length} topics:`, topics);
-    return Array.isArray(topics) ? topics : [];
+    console.log(
+      `Extracted ${result.topics?.length || 0} topics and generated summary (${
+        result.keywords?.length || 0
+      } keywords)`
+    );
+
+    return {
+      topics: Array.isArray(result.topics) ? result.topics : [],
+      summaryText: result.summaryText || "",
+      keywords: Array.isArray(result.keywords) ? result.keywords : [],
+    };
   } catch (error) {
-    console.error("Error extracting topics from PDF:", error);
-    return [];
+    console.error("Error extracting topics and summary from PDF:", error);
+    throw error;
   }
 };
 
-/**
- * Calculate Jaccard similarity between two arrays of strings
- * Returns value between 0 and 1 (1 = identical, 0 = no overlap)
- */
 const calculateTopicSimilarity = (
   topics1: string[],
   topics2: string[]
@@ -77,10 +86,6 @@ const calculateTopicSimilarity = (
   return intersection.size / union.size;
 };
 
-/**
- * Find existing summary with similar topics for the same subject
- * Returns summary if similarity >= threshold (default 0.6)
- */
 export const findSimilarSummary = async (
   subjectId: string,
   entranceExamId: string,
@@ -126,9 +131,6 @@ export const findSimilarSummary = async (
   }
 };
 
-/**
- * Generate comprehensive summary from PDF with topics
- */
 export const generateSummaryFromPDF = async (
   fileUrl: string,
   topics: string[]
@@ -157,25 +159,24 @@ IMPORTANT: Return ONLY valid JSON in this exact format:
 No markdown code blocks, no explanations, just the JSON object.
 `;
 
-    const response = await client.chat.completions.create({
-      model: process.env.OPENAI_MODEL || "gpt-4",
-      messages: [
+    const response = await client.responses.create({
+      model: process.env.OPENAI_MODEL || "gpt-4o",
+      input: [
         {
           role: "user",
           content: [
-            { type: "text", text: prompt },
+            { type: "input_text", text: prompt },
             {
-              type: "image_url",
-              image_url: { url: fileUrl },
+              type: "input_file",
+              file_url: fileUrl,
             },
           ],
         },
       ],
-      max_tokens: 4000,
       temperature: 0.3,
     });
 
-    const content = response.choices[0]?.message?.content || "{}";
+    const content = response.output_text || "{}";
     const cleanedContent = content.trim().replace(/```json\n?|\n?```/g, "");
     const result = JSON.parse(cleanedContent);
 
@@ -206,8 +207,9 @@ export const getOrCreateSummary = async (
   entranceExamId: string
 ): Promise<any> => {
   try {
-    console.log("Extracting topics from PDF...");
-    const topics = await extractTopicsFromPDF(fileUrl);
+    console.log("Extracting topics and generating summary from PDF...");
+    const { topics, summaryText, keywords } =
+      await extractTopicsAndSummaryFromPDF(fileUrl);
 
     if (topics.length === 0) {
       throw new Error("Failed to extract topics from PDF");
@@ -232,11 +234,7 @@ export const getOrCreateSummary = async (
       return existingSummary;
     }
 
-    console.log("No similar summary found, generating new summary...");
-    const { summaryText, keywords } = await generateSummaryFromPDF(
-      fileUrl,
-      topics
-    );
+    console.log("No similar summary found, creating new summary...");
 
     const newSummary = await Summary.create({
       summaryText,

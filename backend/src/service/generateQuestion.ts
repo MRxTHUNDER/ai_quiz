@@ -396,16 +396,15 @@ Return ONLY the JSON array. Do not include markdown code blocks, explanations, o
 `;
 
   try {
-    // Use chat completion API for all cases (works reliably)
-    const response = await client.chat.completions.create({
-      model: process.env.OPENAI_MODEL || "gpt-4",
-      messages: [
+    // Use responses API for all cases (works reliably)
+    const response = await client.responses.create({
+      model: process.env.OPENAI_MODEL || "gpt-4o",
+      input: [
         {
           role: "user",
-          content: prompt,
+          content: [{ type: "input_text", text: prompt }],
         },
       ],
-      max_tokens: 4000,
       temperature: 0.7,
     });
 
@@ -416,7 +415,7 @@ Return ONLY the JSON array. Do not include markdown code blocks, explanations, o
       );
     }
 
-    const rawOutput = response.choices[0]?.message?.content || "[]";
+    const rawOutput = response.output_text || "[]";
 
     try {
       const cleanedOutput = cleanJsonOutput(rawOutput);
@@ -543,15 +542,16 @@ EXAMPLE FORMAT:
 Return ONLY the JSON array. Do not include markdown code blocks, explanations, or any other text.
 `;
 
-    const response = await client.chat.completions.create({
-      model: process.env.OPENAI_MODEL || "gpt-4",
-      messages: [
+    const response = await client.responses.create({
+      model: process.env.OPENAI_MODEL || "gpt-4o",
+      input: [
         {
           role: "user",
-          content: `${prompt}\n\nCONTENT:\n${source}`,
+          content: [
+            { type: "input_text", text: `${prompt}\n\nCONTENT:\n${source}` },
+          ],
         },
       ],
-      max_tokens: 4000,
       temperature: 0.7,
     });
 
@@ -559,7 +559,7 @@ Return ONLY the JSON array. Do not include markdown code blocks, explanations, o
       console.log("Tokens used:", response?.usage?.total_tokens);
     }
 
-    const rawOutput = response.choices[0]?.message?.content || "[]";
+    const rawOutput = response.output_text || "[]";
 
     try {
       // Clean the output to remove markdown code blocks
@@ -670,7 +670,7 @@ Return ONLY the JSON array. Do not include markdown code blocks, explanations, o
 
     const estimatedBatches = Math.ceil(remainingQuestions / currentBatchSize);
     console.log(
-      `Processing batch ${batchNumber} (${actualBatchSize} questions, ~${estimatedBatches} batches remaining)...`
+      `Batch ${batchNumber}/${estimatedBatches}: Generating ${actualBatchSize} questions...`
     );
 
     let batchQuestions = await generateBatch(
@@ -709,7 +709,7 @@ Return ONLY the JSON array. Do not include markdown code blocks, explanations, o
         allQuestions.push(...batchQuestions);
         consecutiveFailures = 0; // Reset failure counter on success
         console.log(
-          `Batch ${batchNumber} completed: ${batchQuestions.length} unique questions generated (Total: ${allQuestions.length}/${finalNumQuestions})`
+          `Batch ${batchNumber} completed: ${batchQuestions.length} questions added (Total: ${allQuestions.length}/${finalNumQuestions})`
         );
       } else {
         console.warn(

@@ -22,7 +22,7 @@ function AdminSignup() {
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     await signup({ firstName, lastName, email, password, adminPassword });
-    navigate("/upload-pdf");
+    navigate("/questions");
   };
 
   return (
