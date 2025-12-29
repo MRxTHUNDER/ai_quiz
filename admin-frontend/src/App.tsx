@@ -11,6 +11,8 @@ import AdminSignup from "@/pages/AdminSignup";
 import Dashboard from "@/pages/Dashboard";
 import UploadPdf from "@/pages/UploadPdf";
 import ExamsManagement from "@/pages/ExamsManagement";
+import UsersManagement from "@/pages/UsersManagement";
+import UserDetails from "@/pages/UserDetails";
 import { useAuthStore } from "@/store/useAuthStore";
 
 function Protected({ children }: { children: React.ReactNode }) {
@@ -62,6 +64,22 @@ function App() {
                   element={
                     <Protected>
                       <ExamsManagement />
+                    </Protected>
+                  }
+                />
+                <Route
+                  path="users"
+                  element={
+                    <Protected>
+                      <UsersManagement />
+                    </Protected>
+                  }
+                />
+                <Route
+                  path="users/:userId"
+                  element={
+                    <Protected>
+                      <UserDetails />
                     </Protected>
                   }
                 />

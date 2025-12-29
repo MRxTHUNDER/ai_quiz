@@ -1,20 +1,11 @@
 import express from "express";
 import { UploadSubjectPDF, TagPDF } from "../controller/uploadPdf.controller";
-import { AuthMiddleware } from "../middleware/middleware";
-import { UserRole } from "../types/types";
+import { adminAuthMiddleware } from "../middleware/middleware";
 
 export const UploadPdfRouter = express.Router();
 
 // Get presigned URL for upload (admin only)
-UploadPdfRouter.post(
-  "/presigned-url",
-  AuthMiddleware({ requiredRoles: [UserRole.ADMIN] }),
-  UploadSubjectPDF
-);
+UploadPdfRouter.post("/presigned-url", adminAuthMiddleware, UploadSubjectPDF);
 
 // Tag PDF with subject and entrance exam (admin only)
-UploadPdfRouter.post(
-  "/tag",
-  AuthMiddleware({ requiredRoles: [UserRole.ADMIN] }),
-  TagPDF
-);
+UploadPdfRouter.post("/tag", adminAuthMiddleware, TagPDF);

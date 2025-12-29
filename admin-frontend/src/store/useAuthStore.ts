@@ -10,8 +10,15 @@ export const useAuthStore = create<any>((set) => ({
   checkAuth: async () => {
     try {
       const res = await axiosInstance.get("/admin/profile");
-      set({ authUser: res.data.user });
-    } catch {
+      if (res.data && res.data.user) {
+        set({ authUser: res.data.user });
+      } else {
+        console.error("[checkAuth] Invalid response structure:", res.data);
+        set({ authUser: null });
+      }
+    } catch (error: any) {
+      console.error("[checkAuth] Error checking auth:", error);
+      console.error("[checkAuth] Error response:", error.response?.data);
       set({ authUser: null });
     } finally {
       set({ isCheckingAuth: false });

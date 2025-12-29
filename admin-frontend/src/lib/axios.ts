@@ -9,22 +9,47 @@ export const axiosInstance = axios.create({
 });
 
 // Response interceptor to flatten the response structure
-// Transforms { message: "...", data: {...} } to { message: "...", ...data }
+// Transforms { message: "...", data: {...}, pagination: {...} } to { message: "...", ...data, pagination: {...} }
 axiosInstance.interceptors.response.use(
   (response) => {
-    // If response has a data property, flatten it
+    // If response has a data property, flatten it while preserving other top-level fields
     if (
       response.data &&
       typeof response.data === "object" &&
       "data" in response.data
     ) {
-      return {
-        ...response,
-        data: {
-          message: response.data.message,
-          ...response.data.data,
-        },
-      };
+      const { data, message, ...otherFields } = response.data;
+
+      // If data is an array, keep it as a property. Otherwise, spread it.
+      if (Array.isArray(data)) {
+        return {
+          ...response,
+          data: {
+            message: message,
+            data: data, // Keep array as data property
+            ...otherFields, // Preserve pagination, count, etc.
+          },
+        };
+      } else if (data && typeof data === "object") {
+        return {
+          ...response,
+          data: {
+            message: message,
+            ...data, // Spread object properties
+            ...otherFields, // Preserve pagination, count, etc.
+          },
+        };
+      } else {
+        // data is null, undefined, or primitive - just preserve other fields
+        return {
+          ...response,
+          data: {
+            message: message,
+            data: data,
+            ...otherFields,
+          },
+        };
+      }
     }
     return response;
   },

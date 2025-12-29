@@ -1,25 +1,17 @@
-// Centralized constants for entrance exams used across the frontend
-
 export type EntranceExamId = "CUET" | "CET" | "JEE" | "NEET" | "CLAT" | "CAT";
 
 export interface EntranceExamSection {
   name: string;
-  // If a section has a fixed official duration, set it; otherwise omit
   durationMinutes?: number;
-  // For CUET, distinguish broad types
   type?: "language" | "domain" | "general";
-  // Optional explicit enumeration of items (languages/subjects within the section)
   items?: string[];
 }
 
 export interface EntranceExamMeta {
   id: EntranceExamId;
   name: string;
-  // Typical total duration of the exam in minutes
   durationMinutes: number;
-  // Subjects/sections covered in the test; some exams don't fix per-section timing
   sections?: EntranceExamSection[];
-  // Any clarifying notes for complex patterns (e.g., CUET domain subjects 60 min list)
   notes?: string;
 }
 

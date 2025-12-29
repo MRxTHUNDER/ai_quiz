@@ -1,5 +1,13 @@
 import { useState, useEffect } from "react";
-import { Plus, Edit, Trash2, Clock, BookOpen } from "lucide-react";
+import {
+  Plus,
+  Edit,
+  Trash2,
+  Clock,
+  BookOpen,
+  Eye,
+  ChevronRight,
+} from "lucide-react";
 import {
   getAllEntranceExams,
   createEntranceExam,
@@ -18,6 +26,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogClose,
+  DialogDescription,
 } from "@/components/ui/dialog";
 
 interface SubjectInput {
@@ -29,6 +38,8 @@ export default function ExamsManagement() {
   const [exams, setExams] = useState<EntranceExam[]>([]);
   const [loading, setLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isSubjectsDialogOpen, setIsSubjectsDialogOpen] = useState(false);
+  const [viewingExam, setViewingExam] = useState<EntranceExam | null>(null);
   const [editingExam, setEditingExam] = useState<EntranceExam | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -100,7 +111,11 @@ export default function ExamsManagement() {
     setSubjects(subjects.filter((_, i) => i !== index));
   };
 
-  const handleSubjectChange = (index: number, field: keyof SubjectInput, value: string | number) => {
+  const handleSubjectChange = (
+    index: number,
+    field: keyof SubjectInput,
+    value: string | number
+  ) => {
     const updated = [...subjects];
     updated[index] = { ...updated[index], [field]: value };
     setSubjects(updated);
@@ -110,12 +125,19 @@ export default function ExamsManagement() {
     e.preventDefault();
     setError(null);
 
-    if (!formData.entranceExamName || !formData.entranceExamId || !formData.durationMinutes) {
+    if (
+      !formData.entranceExamName ||
+      !formData.entranceExamId ||
+      !formData.durationMinutes
+    ) {
       setError("Please fill in all required fields");
       return;
     }
 
-    if (subjects.length === 0 || subjects.some((s) => !s.subjectName || s.durationMinutes <= 0)) {
+    if (
+      subjects.length === 0 ||
+      subjects.some((s) => !s.subjectName || s.durationMinutes <= 0)
+    ) {
       setError("Please add at least one subject with valid duration");
       return;
     }
@@ -142,28 +164,41 @@ export default function ExamsManagement() {
 
       setIsDialogOpen(false);
       await fetchExams();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Failed to save exam:", error);
-      setError(
-        error.response?.data?.message || "Failed to save exam. Please try again."
-      );
+      const errorMessage =
+        (error as { response?: { data?: { message?: string } } })?.response
+          ?.data?.message || "Failed to save exam. Please try again.";
+      setError(errorMessage);
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const handleDelete = async (id: string, name: string) => {
-    if (!confirm(`Are you sure you want to delete "${name}"? This action cannot be undone.`)) {
+    if (
+      !confirm(
+        `Are you sure you want to delete "${name}"? This action cannot be undone.`
+      )
+    ) {
       return;
     }
 
     try {
       await deleteEntranceExam(id);
       await fetchExams();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Failed to delete exam:", error);
-      alert(error.response?.data?.message || "Failed to delete exam");
+      const errorMessage =
+        (error as { response?: { data?: { message?: string } } })?.response
+          ?.data?.message || "Failed to delete exam";
+      alert(errorMessage);
     }
+  };
+
+  const openSubjectsDialog = (exam: EntranceExam) => {
+    setViewingExam(exam);
+    setIsSubjectsDialogOpen(true);
   };
 
   const formatDuration = (minutes: number) => {
@@ -215,18 +250,28 @@ export default function ExamsManagement() {
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {exams.map((exam) => (
-            <Card key={exam._id} className="hover:shadow-lg transition-shadow">
+            <Card
+              key={exam._id}
+              className="hover:shadow-lg transition-shadow flex flex-col"
+            >
               <CardHeader>
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
-                    <CardTitle className="text-xl mb-1">{exam.entranceExamName}</CardTitle>
-                    <p className="text-sm text-muted-foreground">ID: {exam.entranceExamId}</p>
+                    <CardTitle className="text-xl mb-1">
+                      {exam.entranceExamName}
+                    </CardTitle>
+                    <p className="text-sm text-muted-foreground">
+                      ID: {exam.entranceExamId}
+                    </p>
                   </div>
                   <div className="flex gap-2">
                     <Button
                       variant="ghost"
                       size="icon"
-                      onClick={() => openEditDialog(exam)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openEditDialog(exam);
+                      }}
                       className="h-8 w-8"
                     >
                       <Edit className="h-4 w-4" />
@@ -234,7 +279,10 @@ export default function ExamsManagement() {
                     <Button
                       variant="ghost"
                       size="icon"
-                      onClick={() => handleDelete(exam._id, exam.entranceExamName)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDelete(exam._id, exam.entranceExamName);
+                      }}
                       className="h-8 w-8 text-destructive hover:text-destructive"
                     >
                       <Trash2 className="h-4 w-4" />
@@ -242,41 +290,31 @@ export default function ExamsManagement() {
                   </div>
                 </div>
               </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex items-center gap-2 text-sm">
-                  <Clock className="h-4 w-4 text-muted-foreground" />
-                  <span className="font-medium">Total Duration:</span>
-                  <span>{formatDuration(exam.durationMinutes)}</span>
-                </div>
-                <div className="flex items-center gap-2 text-sm">
-                  <BookOpen className="h-4 w-4 text-muted-foreground" />
-                  <span className="font-medium">Subjects:</span>
-                  <span>{exam.subjects.length}</span>
-                </div>
-                {exam.subjects.length > 0 && (
-                  <div className="mt-3 pt-3 border-t">
-                    <p className="text-xs font-medium text-muted-foreground mb-2">Subject Details:</p>
-                    <div className="space-y-1">
-                      {exam.subjects.map((sub, idx) => (
-                        <div
-                          key={idx}
-                          className="flex items-center justify-between text-xs bg-muted/50 rounded px-2 py-1"
-                        >
-                          <span className="font-medium">{sub.subject.subjectName}</span>
-                          <span className="text-muted-foreground">
-                            {formatDuration(sub.durationMinutes)}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
+              <CardContent className="space-y-4 flex-1 flex flex-col">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 text-sm">
+                    <Clock className="h-4 w-4 text-muted-foreground" />
+                    <span className="font-medium">Total Duration:</span>
+                    <span>{formatDuration(exam.durationMinutes)}</span>
                   </div>
-                )}
-                {exam.notes && (
-                  <div className="mt-3 pt-3 border-t">
-                    <p className="text-xs font-medium text-muted-foreground mb-1">Notes:</p>
-                    <p className="text-xs text-muted-foreground line-clamp-2">{exam.notes}</p>
+                  <div className="flex items-center gap-2 text-sm">
+                    <BookOpen className="h-4 w-4 text-muted-foreground" />
+                    <span className="font-medium">Subjects:</span>
+                    <span className="font-semibold">
+                      {exam.subjects.length}
+                    </span>
                   </div>
-                )}
+                </div>
+
+                <Button
+                  variant="outline"
+                  className="w-full mt-auto"
+                  onClick={() => openSubjectsDialog(exam)}
+                >
+                  <Eye className="h-4 w-4 mr-2" />
+                  View Subjects
+                  <ChevronRight className="h-4 w-4 ml-auto" />
+                </Button>
               </CardContent>
             </Card>
           ))}
@@ -287,7 +325,9 @@ export default function ExamsManagement() {
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogClose onClick={() => setIsDialogOpen(false)} />
           <DialogHeader>
-            <DialogTitle>{editingExam ? "Edit Exam" : "Create New Exam"}</DialogTitle>
+            <DialogTitle>
+              {editingExam ? "Edit Exam" : "Create New Exam"}
+            </DialogTitle>
           </DialogHeader>
 
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -306,7 +346,10 @@ export default function ExamsManagement() {
                   id="entranceExamName"
                   value={formData.entranceExamName}
                   onChange={(e) =>
-                    setFormData({ ...formData, entranceExamName: e.target.value })
+                    setFormData({
+                      ...formData,
+                      entranceExamName: e.target.value,
+                    })
                   }
                   placeholder="e.g., JEE Main"
                   required
@@ -331,7 +374,8 @@ export default function ExamsManagement() {
 
             <div className="space-y-2">
               <Label htmlFor="durationMinutes">
-                Total Duration (minutes) <span className="text-destructive">*</span>
+                Total Duration (minutes){" "}
+                <span className="text-destructive">*</span>
               </Label>
               <Input
                 id="durationMinutes"
@@ -347,7 +391,9 @@ export default function ExamsManagement() {
             </div>
 
             <div className="space-y-2">
-              <Label>Subjects <span className="text-destructive">*</span></Label>
+              <Label>
+                Subjects <span className="text-destructive">*</span>
+              </Label>
               <div className="space-y-3 border rounded-lg p-4">
                 {subjects.map((subject, index) => (
                   <div key={index} className="flex gap-2 items-end">
@@ -359,7 +405,11 @@ export default function ExamsManagement() {
                         id={`subject-${index}`}
                         value={subject.subjectName}
                         onChange={(e) =>
-                          handleSubjectChange(index, "subjectName", e.target.value)
+                          handleSubjectChange(
+                            index,
+                            "subjectName",
+                            e.target.value
+                          )
                         }
                         placeholder="e.g., Mathematics"
                         required
@@ -414,7 +464,9 @@ export default function ExamsManagement() {
               <Input
                 id="notes"
                 value={formData.notes}
-                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                onChange={(e) =>
+                  setFormData({ ...formData, notes: e.target.value })
+                }
                 placeholder="Additional notes about this exam"
               />
             </div>
@@ -429,13 +481,102 @@ export default function ExamsManagement() {
                 Cancel
               </Button>
               <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? "Saving..." : editingExam ? "Update Exam" : "Create Exam"}
+                {isSubmitting
+                  ? "Saving..."
+                  : editingExam
+                  ? "Update Exam"
+                  : "Create Exam"}
               </Button>
             </div>
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Subjects View Dialog */}
+      <Dialog
+        open={isSubjectsDialogOpen}
+        onOpenChange={setIsSubjectsDialogOpen}
+      >
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogClose onClick={() => setIsSubjectsDialogOpen(false)} />
+          <DialogHeader>
+            <DialogTitle>
+              {viewingExam?.entranceExamName} - Subjects
+            </DialogTitle>
+            <DialogDescription>
+              View all subjects and their durations for this exam
+            </DialogDescription>
+          </DialogHeader>
+
+          {viewingExam && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4 p-4 bg-muted/50 rounded-lg">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">
+                    Total Duration
+                  </p>
+                  <p className="text-lg font-semibold">
+                    {formatDuration(viewingExam.durationMinutes)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">
+                    Total Subjects
+                  </p>
+                  <p className="text-lg font-semibold">
+                    {viewingExam.subjects.length}
+                  </p>
+                </div>
+              </div>
+
+              <div className="border rounded-lg overflow-hidden">
+                <div className="bg-muted/50 px-4 py-3 border-b">
+                  <h3 className="font-semibold text-sm">Subject Details</h3>
+                </div>
+                <div className="divide-y max-h-[400px] overflow-y-auto">
+                  {viewingExam.subjects.map((sub, idx) => (
+                    <div
+                      key={idx}
+                      className="px-4 py-3 hover:bg-muted/30 transition-colors flex items-center justify-between"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/10 text-primary font-semibold text-sm">
+                          {idx + 1}
+                        </div>
+                        <span className="font-medium">
+                          {sub.subject.subjectName}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Clock className="h-4 w-4 text-muted-foreground" />
+                        <span className="font-medium">
+                          {formatDuration(sub.durationMinutes)}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setIsSubjectsDialogOpen(false);
+                    openEditDialog(viewingExam);
+                  }}
+                >
+                  <Edit className="h-4 w-4 mr-2" />
+                  Edit Exam
+                </Button>
+                <Button onClick={() => setIsSubjectsDialogOpen(false)}>
+                  Close
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
-

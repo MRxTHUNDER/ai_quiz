@@ -53,6 +53,7 @@ async function seedEntranceExams() {
         if (section.items && section.items.length > 0) {
           const sectionDuration =
             section.durationMinutes || examMeta.durationMinutes;
+          const sectionQuestions = section.totalQuestions || 50; // Use actual exam pattern or default to 50
 
           for (const itemName of section.items) {
             // Find or create subject
@@ -70,12 +71,14 @@ async function seedEntranceExams() {
             processedSubjects.push({
               subject: subject._id,
               durationMinutes: sectionDuration,
+              totalQuestions: sectionQuestions, // Use actual exam pattern question count
             });
           }
         } else if (section.name) {
           // If section doesn't have items but has a name (like JEE, NEET, etc.)
           const sectionDuration =
             section.durationMinutes || examMeta.durationMinutes;
+          const sectionQuestions = section.totalQuestions || 50; // Use actual exam pattern or default to 50
 
           // Find or create subject
           let subject = await Subject.findOne({
@@ -92,6 +95,7 @@ async function seedEntranceExams() {
           processedSubjects.push({
             subject: subject._id,
             durationMinutes: sectionDuration,
+            totalQuestions: sectionQuestions, // Use actual exam pattern question count
           });
         }
       }
@@ -104,6 +108,7 @@ async function seedEntranceExams() {
       durationMinutes: examMeta.durationMinutes,
       subjects: processedSubjects,
       notes: examMeta.notes || "",
+      markingScheme: examMeta.markingScheme,
     });
 
     console.log(

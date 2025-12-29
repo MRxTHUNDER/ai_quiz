@@ -3,6 +3,10 @@ import { Subject } from "../models/subject.model";
 import { EntranceExam } from "../models/entranceExam.model";
 import { Pdf } from "../models/pdf.model";
 import { getPresignUploadUrl } from "../service/s3Service";
+import { GenerateAIQuestions } from "../service/generateQuestion";
+import { QuestionModel } from "../models/questions.model";
+import { getOrCreateSummary } from "../service/pdfSummary.service";
+import { GenerateQuestionsFromSubjectKnowledge } from "../service/generateQuestionFromSubject";
 
 export const UploadSubjectPDF = async (req: Request, res: Response) => {
   try {
@@ -34,8 +38,12 @@ export const UploadSubjectPDF = async (req: Request, res: Response) => {
 
 export const TagPDF = async (req: Request, res: Response) => {
   try {
-    const { fileName, key, subjectId, entranceExamId } = req.body;
+    const { fileName, key, subjectId, entranceExamId, numQuestions } = req.body;
     const userId = req.userId;
+
+    // Set default numQuestions to random value between 50-60 if not provided
+    const finalNumQuestions =
+      numQuestions || 50 + Math.floor(Math.random() * 11);
 
     if (!fileName || !key || !subjectId || !entranceExamId) {
       res.status(400).json({
@@ -131,10 +139,109 @@ export const TagPDF = async (req: Request, res: Response) => {
       await subject.save();
     }
 
+    // Get or create summary for this PDF (with topic matching)
+    let summary = null;
+    try {
+      console.log("Processing PDF summary...");
+      summary = await getOrCreateSummary(
+        pdf._id.toString(),
+        finalFileUrl,
+        subject._id.toString(),
+        entranceExam._id.toString()
+      );
+      console.log("Summary processed successfully");
+    } catch (summaryError) {
+      console.error("Error processing summary:", summaryError);
+      // Don't fail the request if summary generation fails
+    }
+
+    // Generate questions (using default 50-60 if not provided)
+    let generatedQuestions = null;
+    if (finalNumQuestions && finalNumQuestions > 0) {
+      try {
+        console.log(
+          `Generating ${finalNumQuestions} questions for subject ${subject.subjectName}`
+        );
+
+        let questions = null;
+
+        // Try summary-based generation first if summary exists
+        if (summary?.summaryText) {
+          try {
+            console.log("Attempting question generation from summary...");
+            questions = await GenerateAIQuestions(
+              summary.summaryText,
+              finalNumQuestions,
+              subject._id.toString(),
+              true
+            );
+            console.log(
+              `Successfully generated ${
+                questions?.length || 0
+              } questions from summary`
+            );
+          } catch (summaryGenError) {
+            console.error("Summary-based generation failed:", summaryGenError);
+            questions = null;
+          }
+        }
+
+        // Fallback: Generate questions based on subject knowledge (no PDF/summary needed)
+        if (!questions || questions.length === 0) {
+          console.log(
+            `Generating questions from subject knowledge: ${subject.subjectName} (${entranceExam.entranceExamName})...`
+          );
+          questions = await GenerateQuestionsFromSubjectKnowledge(
+            subject.subjectName,
+            entranceExam.entranceExamName,
+            finalNumQuestions
+          );
+          console.log(
+            `Generated ${
+              questions?.length || 0
+            } questions from subject knowledge`
+          );
+        }
+
+        if (questions && Array.isArray(questions) && questions.length > 0) {
+          // Format questions for database
+          const formattedQuestions = questions.map((q: any) => ({
+            questionsText: q.questionsText,
+            Options: q.Options,
+            correctOption: q.correctOption,
+            SubjectId: subject._id,
+          }));
+
+          // Save questions to database
+          generatedQuestions = await QuestionModel.insertMany(
+            formattedQuestions
+          );
+          console.log(
+            `Successfully generated and saved ${generatedQuestions.length} questions`
+          );
+        } else {
+          console.warn("No questions generated from AI service");
+        }
+      } catch (questionError) {
+        console.error("Error generating questions:", questionError);
+        // Don't fail the entire request if question generation fails
+        // Just log the error and continue
+      }
+    }
+
     res.status(201).json({
       status: "Success",
       message: "PDF tagged and registered successfully",
       pdf,
+      summary: summary
+        ? {
+            id: summary._id,
+            topics: summary.topics,
+            reused: summary.sourcePdfs.length > 1,
+          }
+        : undefined,
+      questionsGenerated: generatedQuestions?.length || 0,
+      questions: generatedQuestions || undefined,
     });
   } catch (error) {
     console.error(error);

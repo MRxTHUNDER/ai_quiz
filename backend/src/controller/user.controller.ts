@@ -8,6 +8,10 @@ import {
   signupBody,
   updateProfileBody,
 } from "../zod/userValidation";
+import {
+  getUserProfileProgress,
+  getUserProfileStats,
+} from "../service/userProfile.service";
 
 export const Signup = async (req: Request, res: Response) => {
   const { success, error, data } = signupBody.safeParse(req.body);
@@ -95,6 +99,14 @@ export const Signin = async (req: Request, res: Response) => {
     if (!user) {
       res.status(401).json({
         message: "Invalid email or password",
+      });
+      return;
+    }
+
+    // Reject admin users from using normal login
+    if (user.role === UserRole.ADMIN) {
+      res.status(403).json({
+        message: "Admin users must use the admin login portal",
       });
       return;
     }
@@ -229,6 +241,77 @@ export const UpdateProfile = async (req: Request, res: Response) => {
     res.status(500).json({
       message: "Error updating profile",
       error: err.message || err,
+    });
+  }
+};
+
+/**
+ * Get user profile with comprehensive progress tracking and statistics
+ * GET /user/profile/progress
+ * Requires authentication
+ */
+export const GetUserProfileProgress = async (req: Request, res: Response) => {
+  try {
+    const userId = req.userId!;
+
+    // Get user info
+    const user = await User.findById(userId).select("-password");
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    // Get progress data from service
+    const progress = await getUserProfileProgress(userId);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        user: {
+          id: user._id.toString(),
+          email: user.email,
+          firstname: user.firstname,
+          lastname: user.lastname || "",
+          role: user.role,
+        },
+        progress,
+      },
+    });
+  } catch (error) {
+    console.error("Error retrieving user profile progress:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error retrieving user profile progress",
+      error: error instanceof Error ? error.message : "Unknown error",
+    });
+  }
+};
+
+/**
+ * Get detailed statistics and analytics for user progress
+ * GET /user/profile/stats?period=week|month|year|all
+ * Requires authentication
+ */
+export const GetUserProfileStats = async (req: Request, res: Response) => {
+  try {
+    const userId = req.userId!;
+    const period = (req.query.period as string) || "all";
+
+    // Get stats data from service
+    const stats = await getUserProfileStats(userId, period);
+
+    res.status(200).json({
+      success: true,
+      data: stats,
+    });
+  } catch (error) {
+    console.error("Error retrieving user profile stats:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error retrieving user profile stats",
+      error: error instanceof Error ? error.message : "Unknown error",
     });
   }
 };

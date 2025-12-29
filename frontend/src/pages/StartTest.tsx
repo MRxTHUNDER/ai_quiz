@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Calculator,
   Atom,
@@ -10,63 +11,19 @@ import {
   History,
   Palette,
   Monitor,
-  GraduationCap,
-  Landmark,
-  Scale,
-  Languages,
   Clock,
+  ArrowRight,
 } from "lucide-react";
 import Button from "../components/Button";
-import SelectionCard from "../components/SelectionCard";
 import StatCard from "../components/StatCard";
 import QuizCard from "../components/QuizCard";
 import SubjectCard from "../components/SubjectCard";
-import { ENTRANCE_EXAMS, ENTRANCE_EXAM_BY_ID } from "../lib/exams";
 
 function StartTest() {
+  const navigate = useNavigate();
   const [currentView, setCurrentView] = useState<"setup" | "dashboard">(
     "setup"
   );
-  const [selectedExamId, setSelectedExamId] = useState<string>("");
-  const [selectedSubject, setSelectedSubject] = useState<string>("");
-
-  const examIconMap: Record<string, JSX.Element> = {
-    CUET: <Languages className="h-8 w-8" />,
-    JEE: <Atom className="h-8 w-8" />,
-    NEET: <Heart className="h-8 w-8" />,
-    CLAT: <Scale className="h-8 w-8" />,
-    CAT: <Calculator className="h-8 w-8" />,
-    CET: <Landmark className="h-8 w-8" />,
-  };
-
-  type SubjectOption = { key: string; label: string; minutes?: number };
-
-  const subjectOptions: SubjectOption[] = useMemo(() => {
-    if (!selectedExamId) return [];
-    const exam =
-      ENTRANCE_EXAM_BY_ID[selectedExamId as keyof typeof ENTRANCE_EXAM_BY_ID];
-    if (!exam || !exam.sections) return [];
-
-    const options: SubjectOption[] = [];
-    exam.sections.forEach((section) => {
-      if (section.items && section.items.length > 0) {
-        section.items.forEach((item) => {
-          options.push({
-            key: `${section.name}:${item}`,
-            label: item,
-            minutes: section.durationMinutes,
-          });
-        });
-      } else {
-        options.push({
-          key: section.name,
-          label: section.name,
-          minutes: section.durationMinutes,
-        });
-      }
-    });
-    return options;
-  }, [selectedExamId]);
 
   if (currentView === "setup") {
     return (
@@ -83,64 +40,15 @@ function StartTest() {
             </p>
           </div>
 
-          {/* Entrance Exam Selection */}
-          <div className="mb-12">
-            <h2 className="text-2xl font-bold text-gray-900 mb-8 text-center">
-              1. Select an Entrance Exam
-            </h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6">
-              {ENTRANCE_EXAMS.map((exam) => (
-                <SelectionCard
-                  key={exam.id}
-                  icon={
-                    examIconMap[exam.id] ?? (
-                      <GraduationCap className="h-8 w-8" />
-                    )
-                  }
-                  title={`${exam.name}`}
-                  isSelected={selectedExamId === exam.id}
-                  onClick={() => {
-                    setSelectedExamId(exam.id);
-                    setSelectedSubject("");
-                  }}
-                />
-              ))}
-            </div>
-          </div>
-
-          {/* Subject Selection for the chosen exam */}
-          {selectedExamId && (
-            <div className="mb-12">
-              <h2 className="text-2xl font-bold text-gray-900 mb-8 text-center">
-                2. Select a Subject
-              </h2>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6">
-                {subjectOptions.map((opt) => (
-                  <SelectionCard
-                    key={opt.key}
-                    icon={<BookOpen className="h-8 w-8" />}
-                    title={
-                      opt.minutes
-                        ? `${opt.label} (${opt.minutes} min)`
-                        : opt.label
-                    }
-                    isSelected={selectedSubject === opt.key}
-                    onClick={() => setSelectedSubject(opt.key)}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Start Test Button */}
+          {/* Quick Action */}
           <div className="text-center">
             <Button
+              onClick={() => navigate("/test")}
               size="lg"
-              onClick={() => setCurrentView("dashboard")}
-              className="px-12"
-              disabled={!selectedExamId || !selectedSubject}
+              className="px-12 bg-blue-600 hover:bg-blue-700"
             >
-              Start Test
+              Take Test
+              <ArrowRight className="h-5 w-5 ml-2" />
             </Button>
           </div>
         </div>
@@ -161,8 +69,11 @@ function StartTest() {
               Dive into new quizzes, track your progress, and master your
               subjects with Quiz Genius AI.
             </p>
-            <Button className="bg-green-600 hover:bg-green-700">
-              Start New Test
+            <Button 
+              onClick={() => navigate("/test")}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              Take Test
             </Button>
           </div>
         </div>

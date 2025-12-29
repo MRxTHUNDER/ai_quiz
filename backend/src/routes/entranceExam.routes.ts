@@ -6,8 +6,7 @@ import {
   updateEntranceExam,
   deleteEntranceExam,
 } from "../controller/entranceExam.controller";
-import { AuthMiddleware } from "../middleware/middleware";
-import { UserRole } from "../types/types";
+import { adminAuthMiddleware } from "../middleware/middleware";
 
 export const EntranceExamRouter = express.Router();
 
@@ -16,6 +15,6 @@ EntranceExamRouter.get("/", GetAllEntranceExams);
 EntranceExamRouter.get("/:id", GetEntranceExamById);
 
 // Admin only routes
-EntranceExamRouter.post("/create", AuthMiddleware({ requiredRoles: [UserRole.ADMIN] }), createEntranceExam);
-EntranceExamRouter.put("/:id", AuthMiddleware({ requiredRoles: [UserRole.ADMIN] }), updateEntranceExam);
-EntranceExamRouter.delete("/:id", AuthMiddleware({ requiredRoles: [UserRole.ADMIN] }), deleteEntranceExam);
+EntranceExamRouter.post("/create", adminAuthMiddleware, createEntranceExam);
+EntranceExamRouter.put("/:id", adminAuthMiddleware, updateEntranceExam);
+EntranceExamRouter.delete("/:id", adminAuthMiddleware, deleteEntranceExam);

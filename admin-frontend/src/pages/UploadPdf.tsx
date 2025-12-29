@@ -24,6 +24,7 @@ export default function UploadPdf() {
   const [selectedEntranceExamId, setSelectedEntranceExamId] =
     useState<string>("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [numQuestions, setNumQuestions] = useState<number>(0);
   const [uploading, setUploading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<{
     type: "success" | "error" | null;
@@ -155,22 +156,29 @@ export default function UploadPdf() {
       );
       const examId = selectedExam?.entranceExamId || selectedEntranceExamId;
 
-      await axiosInstance.post("/upload/tag", {
+      const tagResponse = await axiosInstance.post("/upload/tag", {
         fileName: selectedFile.name,
         key,
         subjectId: selectedSubject,
         entranceExamId: examId,
+        numQuestions: numQuestions > 0 ? numQuestions : undefined,
       });
+
+      let successMessage = "PDF uploaded and tagged successfully!";
+      if (numQuestions > 0 && tagResponse.data.questionsGenerated) {
+        successMessage += ` ${tagResponse.data.questionsGenerated} questions generated.`;
+      }
 
       setUploadStatus({
         type: "success",
-        message: "PDF uploaded and tagged successfully!",
+        message: successMessage,
       });
 
       // Reset form
       setSelectedFile(null);
       setSelectedSubject("");
       setSelectedEntranceExamId("");
+      setNumQuestions(0);
       const fileInput = document.getElementById(
         "file-input"
       ) as HTMLInputElement;
@@ -261,6 +269,28 @@ export default function UploadPdf() {
                 </option>
               ))}
             </select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="num-questions">
+              Number of Questions to Generate (Optional)
+            </Label>
+            <Input
+              id="num-questions"
+              type="number"
+              min="0"
+              value={numQuestions || ""}
+              onChange={(e) => {
+                const value = parseInt(e.target.value) || 0;
+                setNumQuestions(value >= 0 ? value : 0);
+              }}
+              placeholder="Enter number of questions (0 to skip generation)"
+              className="w-full"
+            />
+            <p className="text-sm text-muted-foreground">
+              Leave as 0 or empty to skip question generation. Questions will be
+              generated based on the uploaded PDF.
+            </p>
           </div>
 
           {uploadStatus.type && (

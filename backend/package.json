@@ -7,7 +7,6 @@
     "start": "tsc -b && node dist/index.js",
     "dev": "tsc-watch --onSuccess \"node dist/index.js\"",
     "build": "tsc -b",
-    "seed": "tsc -b && node dist/seed/seed.js",
     "seed:exams": "tsc -b && node dist/seed/seedEntranceExams.js"
   },
   "keywords": [],

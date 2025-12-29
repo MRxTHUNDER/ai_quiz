@@ -6,6 +6,7 @@ import helmet from "helmet";
 import cors from "cors";
 import { ConnectToDb } from "./db/db";
 import { AdminRouter } from "./routes/admin.routes";
+import { DevRouter } from "./routes/dev.routes";
 import { EntranceExamRouter } from "./routes/entranceExam.routes";
 import { QuestionRouter } from "./routes/question.routes";
 import { SubjectRouter } from "./routes/subject.routes";
@@ -51,6 +52,7 @@ app.use("/api/v1/question", QuestionRouter);
 app.use("/api/v1/subject", SubjectRouter);
 app.use("/api/v1/entrance-exam", EntranceExamRouter);
 app.use("/api/v1/upload", UploadPdfRouter);
+app.use("/api/v1/dev", DevRouter);
 
 app.listen(PORT, () => {
   console.log(`Server in running on port ${PORT}`);

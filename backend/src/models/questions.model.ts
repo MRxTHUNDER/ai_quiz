@@ -20,6 +20,16 @@ const questionModel = new Schema(
       type: Schema.Types.ObjectId,
       ref: "Subject",
     },
+
+    embedding: {
+      type: [Number],
+      default: undefined,
+    },
+
+    topics: {
+      type: [String],
+      default: [],
+    },
   },
 
   { timestamps: true },
@@ -27,5 +37,6 @@ const questionModel = new Schema(
 
 questionModel.index({ SubjectId: 1 }); // Find questions by subject
 questionModel.index({ createdAt: -1 }); // Get newest questions first
+questionModel.index({ SubjectId: 1, topics: 1 }); // Find questions by subject and topics
 
 export const QuestionModel = model("Questions", questionModel);

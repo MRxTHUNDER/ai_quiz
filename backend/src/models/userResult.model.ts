@@ -13,6 +13,11 @@ const userResultSchema = new Schema(
       ref: "Test",
       required: true,
     },
+    entranceExamId: {
+      type: Schema.Types.ObjectId,
+      ref: "EntranceExam",
+      required: true,
+    },
 
     answers: [
       {
@@ -38,6 +43,28 @@ const userResultSchema = new Schema(
       default: TestStatus.IN_PROGRESS,
     },
 
+    startTime: {
+      type: Date,
+      required: true,
+    },
+    endTime: {
+      type: Date,
+      default: null,
+    },
+
+    totalQuestions: {
+      type: Number,
+      required: true,
+    },
+    attemptedCount: {
+      type: Number,
+      default: 0,
+    },
+    correctCount: {
+      type: Number,
+      default: 0,
+    },
+
     score: {
       type: Number,
       default: 0,
@@ -47,11 +74,15 @@ const userResultSchema = new Schema(
       default: 0,
     },
   },
-  { timestamps: true },
+  { timestamps: true }
 );
 
 userResultSchema.index({ userId: 1, testId: 1 });
+userResultSchema.index({ userId: 1, status: 1 }); // Find user's in-progress tests
 userResultSchema.index({ testId: 1, score: -1 });
-userResultSchema.index({ createdAt: -1 });
+userResultSchema.index({ entranceExamId: 1 }); // Find results by entrance exam
+userResultSchema.index({ userId: 1, entranceExamId: 1 }); // Compound: user + exam
+userResultSchema.index({ createdAt: -1 }); // Get newest results first
+userResultSchema.index({ userId: 1, createdAt: -1 }); // Compound: user + newest
 
 export const UserResult = model("UserResult", userResultSchema);

@@ -4,7 +4,7 @@ import mongoose from "mongoose";
 config();
 
 const DbConnection =
-  process.env.MONGODB_URL || "mongodb://localhost:27017/quiz";
+  process.env.MONGODB_URL || "mongodb://localhost:27018/quiz";
 
 if (!DbConnection) {
   throw new Error("MongoDB connection string is not defined");

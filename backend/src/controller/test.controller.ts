@@ -1,59 +1,134 @@
 import { Request, Response } from "express";
 import { Subject } from "../models/subject.model";
+import { EntranceExam } from "../models/entranceExam.model";
 import { QuestionModel } from "../models/questions.model";
 import { testModel, TestModel } from "../models/test.model";
 import { success } from "zod";
 
 export const CreateTest = async (req: Request, res: Response) => {
   try {
-    const { testSubject, questions } = req.body;
+    const { entranceExamId, subjectId, testSubject } = req.body;
 
-    if (!testSubject || isNaN(Number(questions))) {
-      res.status(404).json({
-        message: "testSubject or questions is missing",
+    // Support both old format (testSubject name) and new format (entranceExamId + subjectId)
+    let subjectExists;
+    let entranceExam;
+    let totalQuestionsToUse: number;
+    let durationMinutesToUse: number;
+
+    if (entranceExamId && subjectId) {
+      // New format: Use entrance exam configuration
+      entranceExam = await EntranceExam.findById(entranceExamId);
+      if (!entranceExam) {
+        res.status(404).json({
+          message: "Entrance exam not found",
+        });
+        return;
+      }
+
+      subjectExists = await Subject.findById(subjectId);
+      if (!subjectExists) {
+        res.status(404).json({
+          message: "Subject not found",
+        });
+        return;
+      }
+
+      // Find the subject configuration in the entrance exam
+      const subjectConfig = entranceExam.subjects.find(
+        (sub: any) => sub.subject.toString() === subjectId
+      );
+
+      if (!subjectConfig) {
+        res.status(400).json({
+          message: "Subject is not part of this entrance exam",
+        });
+        return;
+      }
+
+      totalQuestionsToUse = subjectConfig.totalQuestions || 50;
+      durationMinutesToUse = subjectConfig.durationMinutes;
+    } else if (testSubject) {
+      // Old format: Legacy support (subject name only)
+      subjectExists = await Subject.findOne({
+        subjectName: testSubject,
       });
-      return;
-    }
 
-    const subjectExists = await Subject.findOne({
-      subjectName: testSubject,
-    });
+      if (!subjectExists) {
+        res.status(400).json({
+          message: "Subject does not exist",
+        });
+        return;
+      }
 
-    if (!subjectExists) {
+      // For old format, use default or count from questions
+      const totalQuestionsInDb = await QuestionModel.countDocuments({
+        SubjectId: subjectExists._id,
+      });
+
+      totalQuestionsToUse = totalQuestionsInDb || 50;
+      durationMinutesToUse = subjectExists.testDuration;
+    } else {
       res.status(400).json({
-        message: "Subject does not exist",
+        message: "Either (entranceExamId + subjectId) or testSubject is required",
       });
       return;
     }
 
-    const totalQuestions = await QuestionModel.countDocuments({
+    // Check if we have enough questions in the database
+    const availableQuestionsCount = await QuestionModel.countDocuments({
       SubjectId: subjectExists._id,
     });
 
-    if (totalQuestions < questions) {
+    if (availableQuestionsCount < totalQuestionsToUse) {
       res.status(400).json({
-        message: "Not enough questions present to make a test",
+        message: `Not enough questions present. Required: ${totalQuestionsToUse}, Available: ${availableQuestionsCount}`,
       });
       return;
     }
 
-    const selectedQuestions = await QuestionModel.find({
+    // Get all questions from the subject (for proper randomization)
+    const allQuestions = await QuestionModel.find({
       SubjectId: subjectExists._id,
     })
-      .limit(questions)
       .select("_id");
 
+    // Shuffle all questions to ensure randomness (Fisher-Yates algorithm)
+    const shuffledQuestions = [...allQuestions];
+    for (let i = shuffledQuestions.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffledQuestions[i], shuffledQuestions[j]] = [
+        shuffledQuestions[j],
+        shuffledQuestions[i],
+      ];
+    }
+
+    // Take only the required number based on entrance exam configuration
+    const selectedQuestions = shuffledQuestions.slice(0, totalQuestionsToUse);
+
+    // Create test - entranceExamId is required, so we need to handle legacy case
+    if (!entranceExam) {
+      res.status(400).json({
+        message: "entranceExamId is required. Please provide entranceExamId and subjectId when creating a test.",
+      });
+      return;
+    }
+
     const newTest = await TestModel.create({
+      entranceExamId: entranceExam._id,
       testSubject: subjectExists._id,
       questions: selectedQuestions.map((q) => q._id),
+      totalQuestions: totalQuestionsToUse,
+      durationMinutes: durationMinutesToUse,
     });
 
     res.status(201).json({
       message: "Test created successfully",
       test: {
         id: newTest._id,
+        entranceExamId: entranceExam?._id?.toString() || null,
         subject: subjectExists.subjectName,
-        totalQuestions: selectedQuestions.length,
+        totalQuestions: totalQuestionsToUse,
+        durationMinutes: durationMinutesToUse,
         questions: selectedQuestions.map((q) => q._id),
       },
     });
@@ -61,6 +136,7 @@ export const CreateTest = async (req: Request, res: Response) => {
     console.error("Error creating test:", error);
     res.status(500).json({
       message: "Internal server error",
+      error: error instanceof Error ? error.message : "Unknown error",
     });
   }
 };
@@ -131,7 +207,7 @@ export const GetTest = async (req: Request, res: Response) => {
       .populate("testSubject", "subjectName testDuration")
       .populate({
         path: "questions",
-        select: "questionText Options -correctOption",
+        select: "questionsText Options",
       });
 
     if (!test) {

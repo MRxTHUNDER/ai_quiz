@@ -1,12 +1,12 @@
 import { Link, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import { LayoutDashboard, Upload, BookOpen } from "lucide-react";
+import { Upload, BookOpen, Users } from "lucide-react";
 
 const navigation = [
   {
-    name: "Dashboard",
-    href: "/dashboard",
-    icon: LayoutDashboard,
+    name: "Users",
+    href: "/users",
+    icon: Users,
   },
   {
     name: "Upload PDF",
@@ -25,12 +25,11 @@ export function Sidebar() {
 
   return (
     <div className="flex h-screen w-64 flex-col border-r bg-white">
-      <div className="flex h-16 items-center border-b px-6">
-        <h1 className="text-lg font-semibold">Admin Panel</h1>
-      </div>
       <nav className="flex-1 space-y-1 px-3 py-4">
         {navigation.map((item) => {
-          const isActive = location.pathname === item.href;
+          const isActive =
+            location.pathname === item.href ||
+            (item.href === "/users" && location.pathname.startsWith("/users"));
           return (
             <Link
               key={item.name}

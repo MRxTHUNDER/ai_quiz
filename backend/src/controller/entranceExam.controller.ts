@@ -84,6 +84,14 @@ export const createEntranceExam = async (req: Request, res: Response) => {
           return;
         }
 
+        // Validate totalQuestions if provided
+        if (sub.totalQuestions !== undefined && (isNaN(Number(sub.totalQuestions)) || Number(sub.totalQuestions) < 1)) {
+          res.status(400).json({
+            message: "totalQuestions must be a positive number",
+          });
+          return;
+        }
+
         // Find or create subject
         let subject = await Subject.findOne({ subjectName: sub.subjectName });
         if (!subject) {
@@ -96,6 +104,7 @@ export const createEntranceExam = async (req: Request, res: Response) => {
         processedSubjects.push({
           subject: subject._id,
           durationMinutes: sub.durationMinutes,
+          totalQuestions: sub.totalQuestions || 50, // Default to 50 if not provided
         });
       }
     }
@@ -186,6 +195,14 @@ export const updateEntranceExam = async (req: Request, res: Response) => {
           return;
         }
 
+        // Validate totalQuestions if provided
+        if (sub.totalQuestions !== undefined && (isNaN(Number(sub.totalQuestions)) || Number(sub.totalQuestions) < 1)) {
+          res.status(400).json({
+            message: "totalQuestions must be a positive number",
+          });
+          return;
+        }
+
         // Find or create subject
         let subject = await Subject.findOne({ subjectName: sub.subjectName });
         if (!subject) {
@@ -198,6 +215,7 @@ export const updateEntranceExam = async (req: Request, res: Response) => {
         processedSubjects.push({
           subject: subject._id,
           durationMinutes: sub.durationMinutes,
+          totalQuestions: sub.totalQuestions || 50, // Default to 50 if not provided
         });
       }
       // Clear existing subjects and set new ones

@@ -30,14 +30,34 @@ const entranceExam = new Schema(
           type: Number,
           required: true,
         },
+        totalQuestions: {
+          type: Number,
+          required: true,
+          default: 50, // Default to 50 questions if not specified
+        },
       },
     ],
 
     notes: {
       type: String,
     },
+
+    markingScheme: {
+      correctMarks: {
+        type: Number,
+        default: 4,
+      },
+      incorrectMarks: {
+        type: Number,
+        default: -1, // Negative value for penalty
+      },
+      unansweredMarks: {
+        type: Number,
+        default: 0,
+      },
+    },
   },
-  { timestamps: true },
+  { timestamps: true }
 );
 
 // entranceExamName and entranceExamId already have indexes from unique: true

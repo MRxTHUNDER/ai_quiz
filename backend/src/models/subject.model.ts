@@ -4,7 +4,7 @@ const subjectSchema = new Schema(
   {
     subjectName: {
       type: String,
-      reqruired: true,
+      required: true,
     },
 
     testDuration: {

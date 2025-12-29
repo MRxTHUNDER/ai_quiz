@@ -1,6 +1,10 @@
 import { Request, Response } from "express";
 import { GenerateAIQuestions } from "../service/generateQuestion";
 import { QuestionModel } from "../models/questions.model";
+import { Summary } from "../models/summary.model";
+import { Subject } from "../models/subject.model";
+import { EntranceExam } from "../models/entranceExam.model";
+import { GenerateQuestionsFromSubjectKnowledge } from "../service/generateQuestionFromSubject";
 
 interface Questions {
   questionsText: string;
@@ -11,7 +15,7 @@ interface Questions {
 
 export const CreateQuestions = async (req: Request, res: Response) => {
   try {
-    const { fileUrl, subjectId } = req.body;
+    const { fileUrl, subjectId, numQuestions } = req.body;
 
     if (!fileUrl || !subjectId) {
       res.status(400).json({
@@ -20,7 +24,87 @@ export const CreateQuestions = async (req: Request, res: Response) => {
       return;
     }
 
-    const generatedQuestions: Questions[] = await GenerateAIQuestions(fileUrl);
+    // Try to find existing summary for this subject
+    let sourceForQuestions = fileUrl;
+    let isUsingSummary = false;
+
+    try {
+      const summaries = await Summary.find({ subject: subjectId })
+        .sort({ createdAt: -1 })
+        .limit(5);
+
+      if (summaries.length > 0) {
+        // Use combined summaries for richer question generation
+        sourceForQuestions = summaries
+          .map((s) => s.summaryText)
+          .join("\n\n---\n\n");
+        isUsingSummary = true;
+        console.log(
+          `Using ${summaries.length} existing summaries for question generation`
+        );
+      }
+    } catch (summaryError) {
+      console.warn(
+        "Could not fetch summaries, falling back to direct PDF:",
+        summaryError
+      );
+    }
+
+    let generatedQuestions: Questions[] = [];
+
+    // Try summary-based generation first
+    if (isUsingSummary) {
+      try {
+        console.log("Attempting question generation from summaries...");
+        generatedQuestions = await GenerateAIQuestions(
+          sourceForQuestions,
+          numQuestions,
+          subjectId,
+          true
+        );
+        console.log(
+          `Successfully generated ${
+            generatedQuestions?.length || 0
+          } questions from summaries`
+        );
+      } catch (summaryGenError) {
+        console.error("Summary-based generation failed:", summaryGenError);
+        generatedQuestions = [];
+      }
+    }
+
+    // Fallback: Generate questions based on subject knowledge
+    if (!generatedQuestions || generatedQuestions.length === 0) {
+      try {
+        // Get subject and entrance exam details
+        const subject = await Subject.findById(subjectId);
+        const entranceExam = subject
+          ? await EntranceExam.findOne({
+              subjects: { $elemMatch: { subject: subject._id } },
+            })
+          : null;
+
+        if (subject) {
+          console.log(
+            `Generating questions from subject knowledge: ${subject.subjectName}...`
+          );
+          generatedQuestions = await GenerateQuestionsFromSubjectKnowledge(
+            subject.subjectName,
+            entranceExam?.entranceExamName || "General Exam",
+            numQuestions
+          );
+          console.log(
+            `Generated ${
+              generatedQuestions?.length || 0
+            } questions from subject knowledge`
+          );
+        } else {
+          console.error("Subject not found, cannot generate questions");
+        }
+      } catch (fallbackError) {
+        console.error("Subject-based fallback failed:", fallbackError);
+      }
+    }
 
     const formattedQuestions = generatedQuestions.map((q: Questions) => ({
       questionsText: q.questionsText,
@@ -69,7 +153,7 @@ export const GetSubjectQuestions = async (req: Request, res: Response) => {
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
     const limit = Math.min(
       100,
-      Math.max(1, parseInt(req.query.limit as string) || 10),
+      Math.max(1, parseInt(req.query.limit as string) || 10)
     );
     const skip = (page - 1) * limit;
 
