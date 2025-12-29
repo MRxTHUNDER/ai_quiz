@@ -8,13 +8,7 @@ import { GenerateAIQuestions } from "../service/generateQuestion";
 import { QuestionModel } from "../models/questions.model";
 import { getOrCreateSummary } from "../service/pdfSummary.service";
 import { GenerateQuestionsFromSubjectKnowledge } from "../service/generateQuestionFromSubject";
-// @ts-ignore - pdf-poppler doesn't have type definitions
-import poppler from "pdf-poppler";
-import fs from "fs";
-import path from "path";
-import { promisify } from "util";
-
-const unlinkAsync = promisify(fs.unlink);
+import { PDFDocument } from "pdf-lib";
 
 // Configuration from environment variables
 const USER_PDF_COOLDOWN_DAYS = Number(process.env.USER_PDF_COOLDOWN_DAYS || 15);
@@ -54,10 +48,6 @@ async function canUserUpload(
   return { allowed: true, lastUploadDate: lastUpload.uploadedAt };
 }
 
-/**
- * Check user's upload quota
- * GET /user/upload/check-quota
- */
 export const CheckUploadQuota = async (req: Request, res: Response) => {
   try {
     const userId = req.userId;
@@ -158,41 +148,20 @@ async function validatePDF(
     };
   }
 
-  // Check page count using pdf-poppler
+  // Check page count using pdf-lib
   try {
-    // Save buffer to temp file
-    const tempDir = path.join(process.cwd(), "temp");
-    if (!fs.existsSync(tempDir)) {
-      fs.mkdirSync(tempDir, { recursive: true });
+    const pdfDoc = await PDFDocument.load(fileBuffer);
+    const pageCount = pdfDoc.getPageCount();
+
+    if (pageCount > USER_PDF_MAX_PAGES) {
+      return {
+        valid: false,
+        error: `PDF has ${pageCount} pages, exceeding maximum allowed ${USER_PDF_MAX_PAGES} pages`,
+        pageCount,
+      };
     }
 
-    const tempFilePath = path.join(tempDir, `temp_${Date.now()}.pdf`);
-    fs.writeFileSync(tempFilePath, fileBuffer);
-
-    try {
-      // Get PDF info
-      const info = await poppler.info(tempFilePath);
-      const pageCount = info.pages;
-
-      // Clean up temp file
-      await unlinkAsync(tempFilePath);
-
-      if (pageCount > USER_PDF_MAX_PAGES) {
-        return {
-          valid: false,
-          error: `PDF has ${pageCount} pages, exceeding maximum allowed ${USER_PDF_MAX_PAGES} pages`,
-          pageCount,
-        };
-      }
-
-      return { valid: true, pageCount };
-    } catch (pdfError) {
-      // Clean up temp file on error
-      if (fs.existsSync(tempFilePath)) {
-        await unlinkAsync(tempFilePath);
-      }
-      throw pdfError;
-    }
+    return { valid: true, pageCount };
   } catch (error) {
     console.error("Error validating PDF:", error);
     return {
