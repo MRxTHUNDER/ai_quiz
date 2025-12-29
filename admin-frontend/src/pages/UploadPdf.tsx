@@ -214,21 +214,6 @@ export default function UploadPdf() {
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="space-y-2">
-            <Label htmlFor="file-input">PDF File</Label>
-            <Input
-              id="file-input"
-              type="file"
-              accept="application/pdf"
-              onChange={handleFileChange}
-            />
-            {selectedFile && (
-              <p className="text-sm text-muted-foreground">
-                Selected: {selectedFile.name}
-              </p>
-            )}
-          </div>
-
-          <div className="space-y-2">
             <Label htmlFor="entrance-exam">Entrance Exam</Label>
             <select
               id="entrance-exam"
@@ -274,14 +259,31 @@ export default function UploadPdf() {
             </select>
           </div>
 
-          <div className="sptopic">Topic (Optional)</Label>
+          <div className="space-y-2">
+            <Label htmlFor="file-input">PDF File</Label>
+            <Input
+              id="file-input"
+              type="file"
+              accept="application/pdf"
+              onChange={handleFileChange}
+              disabled={uploading}
+            />
+            {selectedFile && (
+              <p className="text-sm text-muted-foreground">
+                Selected: {selectedFile.name}
+              </p>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="topic">Topic (Optional)</Label>
             <Input
               id="topic"
               type="text"
               value={topic}
               onChange={(e) => setTopic(e.target.value)}
               placeholder={selectedFile ? "Not available with PDF upload" : "e.g., Differential Calculus, Organic Chemistry"}
-              disabled={selectedFile !== null}
+              disabled={selectedFile !== null || uploading}
               className="w-full"
             />
             <p className="text-sm text-muted-foreground">
@@ -292,7 +294,6 @@ export default function UploadPdf() {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="ace-y-2">
             <Label htmlFor="num-questions">
               Number of Questions to Generate (Optional)
             </Label>

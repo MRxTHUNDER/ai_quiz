@@ -150,8 +150,16 @@ export const TagPDF = async (req: Request, res: Response) => {
         entranceExam._id.toString()
       );
       console.log("Summary processed successfully");
-    } catch (summaryError) {
-      console.error("Error processing summary:", summaryError);
+    } catch (summaryError: any) {
+      // Log the FULL error details
+      console.error("=== ERROR PROCESSING SUMMARY (FULL) ===");
+      console.error("Error:", summaryError);
+      console.error("Error message:", summaryError?.message);
+      console.error("Error stack:", summaryError?.stack);
+      if (summaryError?.response) {
+        console.error("Error response:", JSON.stringify(summaryError.response, null, 2));
+      }
+      console.error("======================================");
       // Don't fail the request if summary generation fails
     }
 

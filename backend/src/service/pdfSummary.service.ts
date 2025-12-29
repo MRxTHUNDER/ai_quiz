@@ -6,6 +6,63 @@ dotenv.config();
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
+/**
+ * Clean JSON output by removing markdown code blocks and extra whitespace
+ */
+const cleanJsonOutput = (rawOutput: string): string => {
+  if (!rawOutput) return rawOutput;
+
+  let cleaned = rawOutput.trim();
+
+  cleaned = cleaned.replace(/^```(?:json|JSON)?\s*\n?/i, "");
+  cleaned = cleaned.replace(/\n?\s*```$/i, "");
+
+  cleaned = cleaned.trim();
+
+  const jsonStart = cleaned.indexOf("{");
+  const jsonEnd = cleaned.lastIndexOf("}");
+
+  if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
+    cleaned = cleaned.substring(jsonStart, jsonEnd + 1);
+  }
+
+  return cleaned.trim();
+};
+
+/**
+ * Parse JSON with better error handling
+ */
+const parseJsonSafely = (jsonString: string): any => {
+  try {
+    // First try direct parsing
+    return JSON.parse(jsonString);
+  } catch (error: any) {
+    // Log the FULL error for debugging
+    console.error("=== JSON PARSING ERROR (FULL) ===");
+    console.error("Error message:", error.message);
+    console.error("Full raw content:", jsonString);
+    console.error("Content length:", jsonString.length);
+    console.error("=================================");
+
+    // Check if it looks like an error message from the AI
+    if (
+      jsonString.toLowerCase().includes("i'm unable") ||
+      jsonString.toLowerCase().includes("i cannot") ||
+      jsonString.toLowerCase().includes("error") ||
+      jsonString.toLowerCase().includes("sorry")
+    ) {
+      throw new Error(
+        `AI returned an error message instead of JSON: ${jsonString.substring(
+          0,
+          200
+        )}`
+      );
+    }
+
+    throw error;
+  }
+};
+
 export const extractTopicsAndSummaryFromPDF = async (
   fileUrl: string
 ): Promise<{ topics: string[]; summaryText: string; keywords: string[] }> => {
@@ -52,8 +109,29 @@ No markdown code blocks, no explanations, just the JSON object.
     });
 
     const content = response.output_text || "{}";
-    const cleanedContent = content.trim().replace(/```json\n?|\n?```/g, "");
-    const result = JSON.parse(cleanedContent);
+
+    // Check if response looks like an error message
+    if (
+      !content.trim().startsWith("{") &&
+      (content.toLowerCase().includes("i'm unable") ||
+        content.toLowerCase().includes("i cannot") ||
+        content.toLowerCase().includes("error") ||
+        content.toLowerCase().includes("sorry"))
+    ) {
+      // Log the FULL error message
+      console.error(
+        "=== AI RETURNED ERROR MESSAGE (FULL) - extractTopicsAndSummaryFromPDF ==="
+      );
+      console.error("Full AI response:", content);
+      console.error("Response length:", content.length);
+      console.error("Response object:", JSON.stringify(response, null, 2));
+      console.error("=========================================");
+
+      throw new Error(`Failed to process PDF. AI response: ${content}`);
+    }
+
+    const cleanedContent = cleanJsonOutput(content);
+    const result = parseJsonSafely(cleanedContent);
 
     console.log(
       `Extracted ${result.topics?.length || 0} topics and generated summary (${
@@ -66,8 +144,37 @@ No markdown code blocks, no explanations, just the JSON object.
       summaryText: result.summaryText || "",
       keywords: Array.isArray(result.keywords) ? result.keywords : [],
     };
-  } catch (error) {
-    console.error("Error extracting topics and summary from PDF:", error);
+  } catch (error: any) {
+    // Log the FULL error details
+    console.error("=== ERROR EXTRACTING TOPICS AND SUMMARY (FULL) ===");
+    console.error("Error:", error);
+    console.error("Error message:", error?.message);
+    console.error("Error stack:", error?.stack);
+    if (error?.response) {
+      console.error("Error response:", JSON.stringify(error.response, null, 2));
+    }
+    console.error("==================================================");
+
+    // Provide more helpful error messages
+    if (error.message?.includes("AI returned an error message")) {
+      throw new Error(
+        `The AI service was unable to process the PDF. This could be due to:\n` +
+          `- PDF format not supported\n` +
+          `- PDF is corrupted or unreadable\n` +
+          `- PDF is too large or complex\n` +
+          `- File URL is not accessible\n\n` +
+          `Original error: ${error.message}`
+      );
+    }
+
+    if (error.message?.includes("JSON")) {
+      throw new Error(
+        `Failed to parse AI response. The AI service may have returned an unexpected format.\n` +
+          `Please try again or check if the PDF is valid.\n\n` +
+          `Original error: ${error.message}`
+      );
+    }
+
     throw error;
   }
 };
@@ -177,8 +284,29 @@ No markdown code blocks, no explanations, just the JSON object.
     });
 
     const content = response.output_text || "{}";
-    const cleanedContent = content.trim().replace(/```json\n?|\n?```/g, "");
-    const result = JSON.parse(cleanedContent);
+
+    // Check if response looks like an error message
+    if (
+      !content.trim().startsWith("{") &&
+      (content.toLowerCase().includes("i'm unable") ||
+        content.toLowerCase().includes("i cannot") ||
+        content.toLowerCase().includes("error") ||
+        content.toLowerCase().includes("sorry"))
+    ) {
+      // Log the FULL error message
+      console.error(
+        "=== AI RETURNED ERROR MESSAGE (FULL) - generateSummaryFromPDF ==="
+      );
+      console.error("Full AI response:", content);
+      console.error("Response length:", content.length);
+      console.error("Response object:", JSON.stringify(response, null, 2));
+      console.error("=========================================");
+
+      throw new Error(`Failed to process PDF. AI response: ${content}`);
+    }
+
+    const cleanedContent = cleanJsonOutput(content);
+    const result = parseJsonSafely(cleanedContent);
 
     console.log(
       `Generated summary: ${result.summaryText.substring(0, 100)}... (${
@@ -190,8 +318,29 @@ No markdown code blocks, no explanations, just the JSON object.
       summaryText: result.summaryText || "",
       keywords: result.keywords || [],
     };
-  } catch (error) {
-    console.error("Error generating summary from PDF:", error);
+  } catch (error: any) {
+    // Log the FULL error details
+    console.error("=== ERROR GENERATING SUMMARY FROM PDF (FULL) ===");
+    console.error("Error:", error);
+    console.error("Error message:", error?.message);
+    console.error("Error stack:", error?.stack);
+    if (error?.response) {
+      console.error("Error response:", JSON.stringify(error.response, null, 2));
+    }
+    console.error("================================================");
+
+    // Provide more helpful error messages
+    if (error.message?.includes("AI returned an error message")) {
+      throw new Error(
+        `The AI service was unable to process the PDF. This could be due to:\n` +
+          `- PDF format not supported\n` +
+          `- PDF is corrupted or unreadable\n` +
+          `- PDF is too large or complex\n` +
+          `- File URL is not accessible\n\n` +
+          `Original error: ${error.message}`
+      );
+    }
+
     throw error;
   }
 };
@@ -247,8 +396,16 @@ export const getOrCreateSummary = async (
 
     console.log("New summary created and stored");
     return newSummary;
-  } catch (error) {
-    console.error("Error in getOrCreateSummary:", error);
+  } catch (error: any) {
+    // Log the FULL error details
+    console.error("=== ERROR IN getOrCreateSummary (FULL) ===");
+    console.error("Error:", error);
+    console.error("Error message:", error?.message);
+    console.error("Error stack:", error?.stack);
+    if (error?.response) {
+      console.error("Error response:", JSON.stringify(error.response, null, 2));
+    }
+    console.error("==========================================");
     throw error;
   }
 };
