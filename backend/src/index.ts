@@ -22,12 +22,17 @@ ConnectToDb();
 
 const PORT = process.env.PORT || "8080";
 
+// Parse FRONTEND_URL - can be comma-separated list
+const productionOrigins = process.env.FRONTEND_URL
+  ? process.env.FRONTEND_URL.split(",").map((url) => url.trim())
+  : [];
+
 app.use(
   cors({
     credentials: true,
     origin:
       process.env.NODE_ENV === "production"
-        ? process.env.FRONTEND_URL
+        ? productionOrigins
         : ["http://localhost:5173", "http://localhost:5174"],
     methods: ["GET", "POST", "PUT", "DELETE"],
     allowedHeaders: ["Content-Type", "Authorization"],
