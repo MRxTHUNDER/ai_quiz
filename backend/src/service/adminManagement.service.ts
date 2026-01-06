@@ -2,6 +2,7 @@ import { User } from "../models/user.model";
 import { UserResult } from "../models/userResult.model";
 import { TestModel } from "../models/test.model";
 import { UserRole, TestStatus } from "../types/types";
+import mongoose from "mongoose";
 
 /**
  * Get all users with pagination and filtering
@@ -11,13 +12,16 @@ export const getAllUsers = async (
   page: number = 1,
   limit: number = 10,
   search?: string,
-  role?: string
+  role?: string,
+  entranceExamId?: string,
+  startDate?: string,
+  endDate?: string
 ) => {
   const skip = (page - 1) * limit;
 
   // Build filter
   const filter: any = {};
-  
+
   // If role is specified and not "all", filter by that role
   // Otherwise, default to only showing users (exclude admins)
   if (role && role !== "all") {
@@ -26,8 +30,8 @@ export const getAllUsers = async (
     // Default: only return users with role "user" (exclude admins)
     filter.role = UserRole.USER;
   }
-  
-  // Add search filter if provided
+
+  // Add search filter if provided (name or email)
   if (search) {
     filter.$or = [
       { email: { $regex: search, $options: "i" } },
@@ -36,10 +40,34 @@ export const getAllUsers = async (
     ];
   }
 
+  // Filter by entrance exam preference if provided
+  if (entranceExamId && mongoose.Types.ObjectId.isValid(entranceExamId)) {
+    filter.entranceExamPreference = new mongoose.Types.ObjectId(entranceExamId);
+  }
+
+  // Filter by date range if provided
+  if (startDate || endDate) {
+    filter.createdAt = {};
+    if (startDate) {
+      const start = new Date(startDate);
+      start.setHours(0, 0, 0, 0);
+      filter.createdAt.$gte = start;
+    }
+    if (endDate) {
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+      filter.createdAt.$lte = end;
+    }
+  }
+
   const totalCount = await User.countDocuments(filter);
 
   const users = await User.find(filter)
     .select("-password")
+    .populate({
+      path: "entranceExamPreference",
+      select: "entranceExamName entranceExamId",
+    })
     .skip(skip)
     .limit(limit)
     .sort({ createdAt: -1 });
@@ -63,7 +91,10 @@ export const getAllUsers = async (
  * Get user details with statistics
  */
 export const getUserDetails = async (userId: string) => {
-  const user = await User.findById(userId).select("-password");
+  const user = await User.findById(userId).select("-password").populate({
+    path: "entranceExamPreference",
+    select: "entranceExamName entranceExamId",
+  });
   if (!user) {
     return null;
   }
@@ -394,7 +425,10 @@ export const getTestAttemptDetails = async (attemptId: string) => {
  * Get user progress for admin view
  */
 export const getUserProgressForAdmin = async (userId: string) => {
-  const user = await User.findById(userId).select("-password");
+  const user = await User.findById(userId).select("-password").populate({
+    path: "entranceExamPreference",
+    select: "entranceExamName entranceExamId",
+  });
   if (!user) {
     return null;
   }
@@ -409,6 +443,8 @@ export const getUserProgressForAdmin = async (userId: string) => {
       email: user.email,
       firstname: user.firstname,
       lastname: user.lastname || "",
+      phoneNumber: (user as any).phoneNumber || undefined,
+      entranceExamPreference: (user as any).entranceExamPreference || undefined,
       role: user.role,
       createdAt: user.createdAt,
     },

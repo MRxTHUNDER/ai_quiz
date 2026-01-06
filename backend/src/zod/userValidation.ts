@@ -7,6 +7,8 @@ export const signupBody = z.object({
   password: z.string().min(6),
   firstName: z.string().min(2),
   lastName: z.string().optional(),
+  phoneNumber: z.string().length(10).regex(/^[0-9]+$/),
+  entranceExamPreference: z.string().min(1),
 });
 
 export const adminSignupBody = z.object({

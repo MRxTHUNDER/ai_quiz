@@ -218,6 +218,7 @@ export const TagPDF = async (req: Request, res: Response) => {
             Options: q.Options,
             correctOption: q.correctOption,
             SubjectId: subject._id,
+            createdBy: userId || undefined,
           }));
 
           // Save questions to database
@@ -352,6 +353,7 @@ export const GenerateQuestionsDirect = async (req: Request, res: Response) => {
         Options: q.Options,
         correctOption: q.correctOption,
         SubjectId: subject._id,
+        createdBy: userId || undefined,
       }));
 
       // Save questions to database

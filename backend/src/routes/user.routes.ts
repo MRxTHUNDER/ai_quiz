@@ -7,6 +7,7 @@ import {
   GetUserProfileProgress,
   GetUserProfileStats,
 } from "../controller/user.controller";
+import { GetQuestionsByCreator } from "../controller/question.controller";
 import {
   GetEntranceExamSubjects,
   GetUserTests,
@@ -83,3 +84,6 @@ UserRouter.post(
   userAuthMiddleware,
   GenerateQuestionsDirectUser
 );
+
+// Get questions created by the authenticated user
+UserRouter.get("/questions/my-questions", userAuthMiddleware, GetQuestionsByCreator);

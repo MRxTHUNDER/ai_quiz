@@ -1,6 +1,7 @@
 import bcrypt from "bcrypt";
 import { Request, Response } from "express";
 import { User } from "../models/user.model";
+import { EntranceExam } from "../models/entranceExam.model";
 import { UserRole } from "../types/types";
 import { generateUserToken } from "../utils/jwt";
 import {
@@ -35,7 +36,16 @@ export const Signup = async (req: Request, res: Response) => {
     return;
   }
 
-  const { password, email, firstName, lastName } = data;
+  const { password, email, firstName, lastName, phoneNumber, entranceExamPreference } = data;
+
+  // Validate entrance exam preference (required)
+  const exam = await EntranceExam.findById(entranceExamPreference);
+  if (!exam) {
+    res.status(400).json({
+      message: "Invalid entrance exam preference",
+    });
+    return;
+  }
 
   const hashedPassword = await bcrypt.hash(password, 10);
 
@@ -45,6 +55,8 @@ export const Signup = async (req: Request, res: Response) => {
       password: hashedPassword,
       firstname: firstName,
       lastname: lastName || "",
+      phoneNumber: phoneNumber.trim(),
+      entranceExamPreference: entranceExamPreference,
       role: UserRole.USER,
     });
 

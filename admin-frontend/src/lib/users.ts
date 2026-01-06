@@ -5,6 +5,12 @@ export interface User {
   email: string;
   firstname: string;
   lastname?: string;
+  phoneNumber?: string;
+  entranceExamPreference?: string | {
+    _id: string;
+    entranceExamName: string;
+    entranceExamId: string;
+  };
   role: string;
   createdAt: string;
   updatedAt: string;
@@ -30,6 +36,12 @@ export interface UserProgress {
     email: string;
     firstname: string;
     lastname: string;
+    phoneNumber?: string;
+    entranceExamPreference?: string | {
+      _id: string;
+      entranceExamName: string;
+      entranceExamId: string;
+    };
     role: string;
     createdAt: string;
   };
@@ -102,12 +114,18 @@ export const usersApi = {
     limit?: number;
     search?: string;
     role?: string;
+    entranceExamId?: string;
+    startDate?: string;
+    endDate?: string;
   }): Promise<UsersResponse> => {
     const queryParams = new URLSearchParams();
     if (params?.page) queryParams.append("page", params.page.toString());
     if (params?.limit) queryParams.append("limit", params.limit.toString());
     if (params?.search) queryParams.append("search", params.search);
     if (params?.role) queryParams.append("role", params.role);
+    if (params?.entranceExamId) queryParams.append("entranceExamId", params.entranceExamId);
+    if (params?.startDate) queryParams.append("startDate", params.startDate);
+    if (params?.endDate) queryParams.append("endDate", params.endDate);
 
     const response = await axiosInstance.get(
       `/admin/users?${queryParams.toString()}`
@@ -138,6 +156,55 @@ export const usersApi = {
     const response = await axiosInstance.get(`/admin/users/${userId}/progress`);
     // Response is flattened by interceptor, so data is at the top level
     return response.data;
+  },
+
+  // Get all users for export (fetches all users in batches)
+  getAllUsersForExport: async (
+    search?: string,
+    role?: string,
+    entranceExamId?: string,
+    startDate?: string,
+    endDate?: string
+  ): Promise<User[]> => {
+    // Fetch with limit 100 (backend max) and fetch all pages if needed
+    const queryParams = new URLSearchParams();
+    queryParams.append("page", "1");
+    queryParams.append("limit", "100"); // Backend max limit is 100
+    if (search) queryParams.append("search", search);
+    if (role) queryParams.append("role", role);
+    if (entranceExamId) queryParams.append("entranceExamId", entranceExamId);
+    if (startDate) queryParams.append("startDate", startDate);
+    if (endDate) queryParams.append("endDate", endDate);
+
+    const response = await axiosInstance.get(
+      `/admin/users?${queryParams.toString()}`
+    );
+    
+    let allUsers = response.data.users || [];
+    const pagination = response.data.pagination || { totalPages: 1 };
+
+    // If there are more pages, fetch them
+    if (pagination.totalPages > 1) {
+      const additionalPages = [];
+      for (let page = 2; page <= pagination.totalPages; page++) {
+        const pageParams = new URLSearchParams();
+        pageParams.append("page", page.toString());
+        pageParams.append("limit", "100"); // Backend max limit is 100
+        if (search) pageParams.append("search", search);
+        if (role) pageParams.append("role", role);
+        if (entranceExamId) pageParams.append("entranceExamId", entranceExamId);
+        if (startDate) pageParams.append("startDate", startDate);
+        if (endDate) pageParams.append("endDate", endDate);
+
+        const pageResponse = await axiosInstance.get(
+          `/admin/users?${pageParams.toString()}`
+        );
+        additionalPages.push(...(pageResponse.data.users || []));
+      }
+      allUsers = [...allUsers, ...additionalPages];
+    }
+
+    return allUsers;
   },
 };
 

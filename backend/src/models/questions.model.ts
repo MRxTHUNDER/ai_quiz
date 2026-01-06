@@ -30,6 +30,11 @@ const questionModel = new Schema(
       type: [String],
       default: [],
     },
+
+    createdBy: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+    },
   },
 
   { timestamps: true },
@@ -38,5 +43,6 @@ const questionModel = new Schema(
 questionModel.index({ SubjectId: 1 }); // Find questions by subject
 questionModel.index({ createdAt: -1 }); // Get newest questions first
 questionModel.index({ SubjectId: 1, topics: 1 }); // Find questions by subject and topics
+questionModel.index({ createdBy: 1 }); // Find questions by creator
 
 export const QuestionModel = model("Questions", questionModel);

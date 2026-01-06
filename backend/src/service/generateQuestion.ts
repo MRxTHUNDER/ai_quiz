@@ -351,22 +351,43 @@ const generateBatch = async (
   const topicGuidance = subjectId ? await getTopicGuidance(subjectId) : "";
 
   const baseInstructions = isUsingSummary
-    ? `You are a question generation assistant. Based on the provided educational content summary, generate exam-style multiple-choice questions.
+    ? `You are an expert COMPETITIVE ENTRANCE EXAM question generator specializing in creating high-stakes entrance examination questions. Based on the provided educational content summary, generate high-quality, ENTRANCE EXAM-LEVEL multiple-choice questions that test deep conceptual understanding, analytical thinking, and application of knowledge suitable for competitive entrance examinations.
 
 CONTENT SUMMARY:
 ${source}`
-    : `You are a question generation assistant. Analyze the provided previous year question paper and generate new questions in the exact same format, style, and difficulty level.`;
+    : `You are an expert COMPETITIVE ENTRANCE EXAM question generator. Analyze the provided previous year question paper from a competitive entrance examination and generate new questions that match the exact format, style, difficulty level, and question patterns typical of high-stakes competitive entrance examinations (such as NEET, JEE, CUET, CLAT, CAT, etc.).`;
 
   const prompt = `
 ${baseInstructions}
+
+COMPETITIVE ENTRANCE EXAM QUESTION STANDARDS:
+- These are ENTRANCE EXAM-LEVEL questions for competitive examinations (NEET, JEE, CUET, CLAT, CAT, etc.)
+- Questions must test DEEP CONCEPTUAL UNDERSTANDING, not just memorization
+- Include questions that require APPLICATION of concepts to solve complex problems
+- Mix of difficulty levels: 30% easy (basic concepts), 50% medium (application), 20% challenging (advanced analysis)
+- Questions should be CLEAR, UNAMBIGUOUS, and professionally worded
+- Each question should test a specific concept or skill relevant to entrance exams
+- Avoid trivial, overly simple, or elementary-level questions
+- Include questions that require multi-step reasoning, critical thinking, and problem-solving
+- Questions must match the complexity and rigor of actual competitive entrance exam questions
+
+QUESTION QUALITY REQUIREMENTS:
+1. Question text must be clear, concise, and grammatically correct
+2. All 4 options must be plausible and well-constructed
+3. Wrong options (distractors) should be common mistakes or misconceptions
+4. Options should be similar in length and format when possible
+5. Avoid using "All of the above" or "None of the above" unless contextually appropriate
+6. For numerical questions, ensure options are in logical order (ascending/descending)
+7. Questions should be solvable within 1-3 minutes for an average student
+8. Include variety: conceptual questions, calculation-based, application-based, and analysis-based
 
 CRITICAL REQUIREMENTS:
 1. Generate EXACTLY ${batchSize} questions${batchInfo}
 2. Return ONLY a valid JSON array - no markdown, no explanations, no extra text
 3. Start your response with [ and end with ]
 4. Each question must have exactly these fields:
-   - "questionsText": The question text (string)
-   - "Options": An array of exactly 4 strings
+   - "questionsText": The question text (string) - must be clear and complete
+   - "Options": An array of exactly 4 strings - all must be plausible answers
    - "correctOption": The correct answer as a string (must match one of the Options exactly)
 
 JSON FORMATTING RULES:
@@ -377,17 +398,17 @@ JSON FORMATTING RULES:
 - No trailing commas
 - No comments
 
-EXAMPLE FORMAT:
+EXAMPLE FORMAT (High-quality entrance exam questions):
 [
   {
-    "questionsText": "What is 2 + 2?",
-    "Options": ["3", "4", "5", "6"],
-    "correctOption": "4"
+    "questionsText": "A particle moves in a straight line with velocity v(t) = 3t² - 12t + 9 m/s. At what time does the particle come to rest?",
+    "Options": ["1 s and 3 s", "2 s only", "1.5 s", "The particle never comes to rest"],
+    "correctOption": "1 s and 3 s"
   },
   {
-    "questionsText": "Solve for x: 2x = 10",
-    "Options": ["5", "10", "20", "8"],
-    "correctOption": "5"
+    "questionsText": "In a chemical reaction, if the rate constant doubles when temperature increases from 300K to 310K, what is the approximate activation energy? (Assume R = 8.314 J/mol·K)",
+    "Options": ["53.6 kJ/mol", "107.2 kJ/mol", "26.8 kJ/mol", "214.4 kJ/mol"],
+    "correctOption": "53.6 kJ/mol"
   }
 ]
 ${topicGuidance}
@@ -506,15 +527,35 @@ export const GenerateAIQuestions = async (
 
   if (!finalNumQuestions || finalNumQuestions <= 0) {
     const prompt = `
-You are a question generation assistant. Analyze the provided previous year question paper and generate new questions in the exact same format, style, and difficulty level.
+You are an expert COMPETITIVE ENTRANCE EXAM question generator specializing in high-stakes entrance examinations. Analyze the provided previous year question paper from a competitive entrance examination and generate new questions that match the exact format, style, difficulty level, and question patterns typical of competitive entrance examinations (such as NEET, JEE, CUET, CLAT, CAT, etc.).
+
+COMPETITIVE ENTRANCE EXAM QUESTION STANDARDS:
+- Questions must test CONCEPTUAL UNDERSTANDING, not just memorization
+- Include questions that require APPLICATION of concepts to solve complex problems
+- Mix of difficulty levels: 30% easy (basic concepts), 50% medium (application), 20% challenging (advanced analysis)
+- Questions should be CLEAR, UNAMBIGUOUS, and professionally worded
+- Each question should test a specific concept or skill relevant to entrance exams
+- Avoid trivial, overly simple, or elementary-level questions
+- Include questions that require multi-step reasoning, critical thinking, and problem-solving
+- Questions must match the complexity and rigor of actual competitive entrance exam questions
+
+QUESTION QUALITY REQUIREMENTS:
+1. Question text must be clear, concise, and grammatically correct
+2. All 4 options must be plausible and well-constructed
+3. Wrong options (distractors) should be common mistakes or misconceptions
+4. Options should be similar in length and format when possible
+5. Avoid using "All of the above" or "None of the above" unless contextually appropriate
+6. For numerical questions, ensure options are in logical order (ascending/descending)
+7. Questions should be solvable within 1-3 minutes for an average student
+8. Include variety: conceptual questions, calculation-based, application-based, and analysis-based
 
 CRITICAL REQUIREMENTS:
 1. Generate the same number of questions as in the provided PDF
 2. Return ONLY a valid JSON array - no markdown, no explanations, no extra text
 3. Start your response with [ and end with ]
 4. Each question must have exactly these fields:
-   - "questionsText": The question text (string)
-   - "Options": An array of exactly 4 strings
+   - "questionsText": The question text (string) - must be clear and complete
+   - "Options": An array of exactly 4 strings - all must be plausible answers
    - "correctOption": The correct answer as a string (must match one of the Options exactly)
 
 JSON FORMATTING RULES:
@@ -525,17 +566,17 @@ JSON FORMATTING RULES:
 - No trailing commas
 - No comments
 
-EXAMPLE FORMAT:
+EXAMPLE FORMAT (High-quality entrance exam questions):
 [
   {
-    "questionsText": "What is 2 + 2?",
-    "Options": ["3", "4", "5", "6"],
-    "correctOption": "4"
+    "questionsText": "A particle moves in a straight line with velocity v(t) = 3t² - 12t + 9 m/s. At what time does the particle come to rest?",
+    "Options": ["1 s and 3 s", "2 s only", "1.5 s", "The particle never comes to rest"],
+    "correctOption": "1 s and 3 s"
   },
   {
-    "questionsText": "Solve for x: 2x = 10",
-    "Options": ["5", "10", "20", "8"],
-    "correctOption": "5"
+    "questionsText": "In a chemical reaction, if the rate constant doubles when temperature increases from 300K to 310K, what is the approximate activation energy? (Assume R = 8.314 J/mol·K)",
+    "Options": ["53.6 kJ/mol", "107.2 kJ/mol", "26.8 kJ/mol", "214.4 kJ/mol"],
+    "correctOption": "53.6 kJ/mol"
   }
 ]
 

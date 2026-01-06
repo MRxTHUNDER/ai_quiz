@@ -13,6 +13,9 @@ import {
   Clock,
   XCircle,
   BarChart3,
+  Phone,
+  GraduationCap,
+  Download,
 } from "lucide-react";
 import { usersApi, UserProgress } from "@/lib/users";
 import { Button } from "@/components/ui/button";
@@ -23,6 +26,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { exportUserProgressToExcel } from "@/lib/excelUtils";
 
 function UserDetails() {
   const { userId } = useParams<{ userId: string }>();
@@ -30,6 +34,7 @@ function UserDetails() {
   const [progress, setProgress] = useState<UserProgress | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     if (userId) {
@@ -63,6 +68,26 @@ function UserDetails() {
       </div>
     );
   }
+
+  const handleExportToExcel = () => {
+    if (!progress) return;
+    
+    try {
+      setExporting(true);
+      // Generate filename with user name and timestamp
+      const timestamp = new Date().toISOString().split("T")[0];
+      const userName = `${progress.user.firstname}_${progress.user.lastname || "User"}`.replace(/\s+/g, "_");
+      const filename = `user-progress-${userName}-${timestamp}.xlsx`;
+      
+      // Export to Excel
+      exportUserProgressToExcel(progress, filename);
+    } catch (err) {
+      console.error("Error exporting user progress:", err);
+      alert("Failed to export user progress. Please try again.");
+    } finally {
+      setExporting(false);
+    }
+  };
 
   if (error || !progress) {
     return (
@@ -109,6 +134,24 @@ function UserDetails() {
             View user information and test progress
           </p>
         </div>
+        <Button
+          onClick={handleExportToExcel}
+          disabled={exporting}
+          variant="outline"
+          className="gap-2"
+        >
+          {exporting ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Exporting...
+            </>
+          ) : (
+            <>
+              <Download className="h-4 w-4" />
+              Export to Excel
+            </>
+          )}
+        </Button>
       </div>
 
       {/* User Information */}
@@ -139,11 +182,22 @@ function UserDetails() {
                   Joined: {new Date(user.createdAt).toLocaleDateString()}
                 </span>
               </div>
-              <div>
-                <span className="px-3 py-1 bg-gray-100 rounded text-sm">
-                  {user.role}
-                </span>
-              </div>
+              {user.phoneNumber && (
+                <div className="flex items-center gap-2 text-gray-600">
+                  <Phone className="h-4 w-4" />
+                  <span className="text-sm">{user.phoneNumber}</span>
+                </div>
+              )}
+              {user.entranceExamPreference && (
+                <div className="flex items-center gap-2 text-gray-600">
+                  <GraduationCap className="h-4 w-4" />
+                  <span className="text-sm">
+                    {typeof user.entranceExamPreference === "object"
+                      ? user.entranceExamPreference.entranceExamName
+                      : "Entrance Exam"}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
         </CardContent>
@@ -157,7 +211,7 @@ function UserDetails() {
               <div>
                 <p className="text-sm text-gray-600">Total Tests</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  {safeProgress.totalTests || 0}
+                  {safeProgress.totalTests || "-"}
                 </p>
               </div>
               <BookOpen className="h-8 w-8 text-blue-600" />
@@ -171,7 +225,7 @@ function UserDetails() {
               <div>
                 <p className="text-sm text-gray-600">Completed</p>
                 <p className="text-2xl font-bold text-green-600">
-                  {safeProgress.completedTests || 0}
+                  {safeProgress.completedTests || "-"}
                 </p>
               </div>
               <CheckCircle2 className="h-8 w-8 text-green-600" />
@@ -185,7 +239,7 @@ function UserDetails() {
               <div>
                 <p className="text-sm text-gray-600">In Progress</p>
                 <p className="text-2xl font-bold text-yellow-600">
-                  {safeProgress.inProgressTests || 0}
+                  {safeProgress.inProgressTests || "-"}
                 </p>
               </div>
               <Clock className="h-8 w-8 text-yellow-600" />
@@ -199,7 +253,7 @@ function UserDetails() {
               <div>
                 <p className="text-sm text-gray-600">Abandoned</p>
                 <p className="text-2xl font-bold text-red-600">
-                  {safeProgress.abandonedTests || 0}
+                  {safeProgress.abandonedTests || "-"}
                 </p>
               </div>
               <XCircle className="h-8 w-8 text-red-600" />
@@ -221,7 +275,7 @@ function UserDetails() {
                 <span className="text-gray-600">Average Score</span>
               </div>
               <span className="text-xl font-bold text-gray-900">
-                {(safeProgress.averageScore || 0).toFixed(1)}
+                {safeProgress.averageScore ? safeProgress.averageScore.toFixed(1) : "-"}
               </span>
             </div>
             <div className="flex items-center justify-between">
@@ -230,7 +284,7 @@ function UserDetails() {
                 <span className="text-gray-600">Average Percentage</span>
               </div>
               <span className="text-xl font-bold text-gray-900">
-                {(safeProgress.averagePercentage || 0).toFixed(1)}%
+                {safeProgress.averagePercentage ? safeProgress.averagePercentage.toFixed(1) + "%" : "-"}
               </span>
             </div>
             <div className="flex items-center justify-between">
@@ -239,7 +293,7 @@ function UserDetails() {
                 <span className="text-gray-600">Best Score</span>
               </div>
               <span className="text-xl font-bold text-gray-900">
-                {safeProgress.bestScore || 0}
+                {safeProgress.bestScore || "-"}
               </span>
             </div>
             <div className="flex items-center justify-between">
@@ -248,25 +302,25 @@ function UserDetails() {
                 <span className="text-gray-600">Best Percentage</span>
               </div>
               <span className="text-xl font-bold text-gray-900">
-                {(safeProgress.bestPercentage || 0).toFixed(1)}%
+                {safeProgress.bestPercentage ? safeProgress.bestPercentage.toFixed(1) + "%" : "-"}
               </span>
             </div>
             <div className="flex items-center justify-between pt-4 border-t">
               <span className="text-gray-600">Overall Accuracy</span>
               <span className="text-xl font-bold text-gray-900">
-                {(safeProgress.overallAccuracy || 0).toFixed(1)}%
+                {safeProgress.overallAccuracy ? safeProgress.overallAccuracy.toFixed(1) + "%" : "-"}
               </span>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-gray-600">Questions Answered</span>
               <span className="text-lg font-semibold text-gray-900">
-                {safeProgress.totalQuestionsAnswered || 0}
+                {safeProgress.totalQuestionsAnswered || "-"}
               </span>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-gray-600">Correct Answers</span>
               <span className="text-lg font-semibold text-green-600">
-                {safeProgress.totalCorrectAnswers || 0}
+                {safeProgress.totalCorrectAnswers || "-"}
               </span>
             </div>
           </CardContent>

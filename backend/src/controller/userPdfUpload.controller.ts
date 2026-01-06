@@ -466,6 +466,7 @@ export const TagUserPDF = async (req: Request, res: Response) => {
           SubjectId: subject._id,
           embedding: q.embedding,
           topics: q.topics,
+          createdBy: userId || undefined,
         }));
 
         generatedQuestions = await QuestionModel.insertMany(formattedQuestions);
@@ -636,6 +637,7 @@ export const GenerateQuestionsDirectUser = async (
         Options: q.Options,
         correctOption: q.correctOption,
         SubjectId: subject._id,
+        createdBy: userId || undefined,
       }));
 
       // Save questions to database

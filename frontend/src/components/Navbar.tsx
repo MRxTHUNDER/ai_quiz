@@ -17,13 +17,12 @@ function Navbar() {
 
   const navItems = [
     { name: "Home", path: "/" },
-    { name: "About", path: "/about" },
     { name: "Contact", path: "/contact" },
     { name: "Dashboard", path: "/dashboard" },
   ];
 
   // Additional nav items only for authenticated users
-  const authNavItems = [{ name: "Generate Questions", path: "/upload-pdf" }];
+  const authNavItems = [{ name: "Questions", path: "/questions" }];
 
   const isActive = (path: string) => location.pathname === path;
 

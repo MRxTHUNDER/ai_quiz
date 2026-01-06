@@ -94,36 +94,60 @@ const generateBatchFromSubject = async (
       : "";
 
     const prompt = `
-You are an expert question generator for ${entranceExamName} entrance exam preparation.
+You are an expert question generator specializing in ${entranceExamName} entrance exam preparation. Your task is to create high-quality, competitive-level questions that accurately reflect the standards, difficulty, and question patterns of ${entranceExamName}.
 
 Generate ${numQuestions} multiple-choice questions for the subject: ${subjectName}${topicText}
 
+ENTRANCE EXAM QUESTION STANDARDS FOR ${entranceExamName}:
+- Questions must test DEEP CONCEPTUAL UNDERSTANDING, not just rote memorization
+- Include questions that require APPLICATION of concepts to solve real-world or theoretical problems
+- Mix of difficulty levels: 30% easy (basic concepts), 50% medium (application), 20% challenging (advanced analysis)
+- Questions should be CLEAR, UNAMBIGUOUS, and professionally worded
+- Each question should test a specific concept, principle, or skill relevant to ${entranceExamName}
+- Avoid trivial, overly simple, or trick questions
+- Include questions that require multi-step reasoning, critical thinking, and problem-solving
+- Questions should match the complexity and style of actual ${entranceExamName} exam questions
+- Ensure questions are aligned with the ${entranceExamName} syllabus and exam pattern
+
+QUESTION QUALITY REQUIREMENTS:
+1. Question text must be clear, concise, grammatically correct, and professionally written
+2. All 4 options must be plausible, well-constructed, and test understanding
+3. Wrong options (distractors) should represent common mistakes, misconceptions, or partial understanding
+4. Options should be similar in length and format when possible (avoid obvious giveaways)
+5. Avoid using "All of the above" or "None of the above" unless contextually appropriate for ${entranceExamName}
+6. For numerical questions, ensure options are in logical order (ascending/descending) and include reasonable values
+7. Questions should be solvable within 1-3 minutes for a well-prepared ${entranceExamName} candidate
+8. Include variety: conceptual understanding, calculation-based, application-based, analysis-based, and synthesis questions
+9. Questions should test both breadth and depth of knowledge in ${subjectName}
+10. Ensure questions are factually accurate and align with current ${entranceExamName} curriculum standards
+
 REQUIREMENTS:
 1. Generate EXACTLY ${numQuestions} high-quality questions
-2. Questions should match ${entranceExamName} exam pattern and difficulty level
+2. Questions must match ${entranceExamName} exam pattern, difficulty level, and question style
 3. Cover diverse ${
-      topic ? "aspects of " + topic : "topics within " + subjectName
+      topic ? "aspects and applications of " + topic : "important topics and concepts within " + subjectName
     }
 4. Each question must have exactly 4 options
-5. Return ONLY valid JSON array - no markdown, no explanations
+5. Return ONLY valid JSON array - no markdown, no explanations, no additional text
 
 JSON FORMAT:
 [
   {
-    "questionsText": "The question text here",
-    "Options": ["Option A", "Option B", "Option C", "Option D"],
-    "correctOption": "The correct option (must match one of the Options exactly)"
+    "questionsText": "The question text here (clear, complete, and professionally worded)",
+    "Options": ["Option A (plausible distractor)", "Option B (correct answer)", "Option C (plausible distractor)", "Option D (plausible distractor)"],
+    "correctOption": "Option B (must match one of the Options exactly)"
   }
 ]
 
 IMPORTANT:
-- Questions should be factual and accurate
-- Difficulty level: ${entranceExamName} standard
-- Cover various concepts in ${subjectName}
+- Questions should be factual, accurate, and aligned with ${entranceExamName} standards
+- Difficulty level must match ${entranceExamName} exam expectations
+- Cover various important concepts, principles, and applications in ${subjectName}
 - All strings must be properly JSON-escaped
 - For LaTeX/math notation, use double backslashes: \\\\
+- Ensure questions are suitable for competitive entrance exam preparation
 
-Return ONLY the JSON array. No markdown code blocks, no explanations.
+Return ONLY the JSON array. No markdown code blocks, no explanations, no additional commentary.
 `;
 
     const response = await client.responses.create({

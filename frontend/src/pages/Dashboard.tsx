@@ -112,14 +112,27 @@ function Dashboard() {
       setLoading(true);
       const [progressRes, historyRes] = await Promise.all([
         axiosInstance.get("/user/profile/progress"),
-        axiosInstance.get("/user/test-history?status=completed&limit=6"),
+        // Fetch all finished tests (completed and time_up) - no status filter to get all finished tests
+        axiosInstance.get("/user/test-history?limit=6"),
       ]);
 
-      if (progressRes.data?.data) {
-        setProgressData(progressRes.data.data);
+      // Axios interceptor flattens the response, so progressRes.data is already the data object
+      // Backend returns: { success: true, data: { user: {...}, progress: {...} } }
+      // After interceptor: response.data = { user: {...}, progress: {...} }
+      if (progressRes.data) {
+        setProgressData(progressRes.data);
       }
+
+      // For test history, the interceptor preserves arrays in data.data
+      // Backend returns: { success: true, data: [...], pagination: {...} }
+      // After interceptor: response.data = { data: [...], pagination: {...} }
       if (historyRes.data?.data) {
-        setTestHistory(historyRes.data.data);
+        // Filter to only show completed or time_up tests (finished tests)
+        const finishedTests = historyRes.data.data.filter(
+          (test: TestHistoryItem) =>
+            test.status === "completed" || test.status === "time_up"
+        );
+        setTestHistory(finishedTests);
       }
     } catch (error) {
       console.error("Error fetching dashboard data:", error);
@@ -145,16 +158,41 @@ function Dashboard() {
     return null;
   }
 
+  // Helper function to format values - show "-" if no data, otherwise show the value
+  // If no tests completed, show "-" for all stats
+  // Otherwise, show actual values (even 0% is valid if they completed tests)
+  const hasCompletedTests = (progressData?.progress.completedTests ?? 0) > 0;
+
+  const formatValue = (
+    value: number | undefined | null,
+    isPercentage: boolean = false
+  ): string => {
+    // If no tests completed, show "-" for all stats
+    if (!hasCompletedTests) {
+      return "-";
+    }
+    // If value is null/undefined, show "-"
+    if (value === undefined || value === null) {
+      return "-";
+    }
+    // Show actual value (0% is valid if tests were completed)
+    return isPercentage ? `${value.toFixed(0)}%` : value.toString();
+  };
+
   const userName = authUser.firstname || "User";
   const userEmail = authUser.email || "";
-  const testsDone = progressData?.progress.completedTests || 0;
-  const avgScore = progressData?.progress.averagePercentage || 0;
-  const subjectsMastered = progressData?.progress.testsBySubject.length || 0;
-  const highScore = progressData?.progress.bestPercentage || 0;
+  const testsDone = progressData?.progress.completedTests;
+  const avgScore = progressData?.progress.averagePercentage;
+  const subjectsMastered = progressData?.progress.testsBySubject?.length;
+  const highScore = progressData?.progress.bestPercentage;
+  const overallAccuracy = progressData?.progress.overallAccuracy;
   const highScoreSubject =
-    progressData?.progress.testsBySubject.sort(
-      (a, b) => b.bestScore - a.bestScore
-    )[0]?.subject || "N/A";
+    progressData?.progress.testsBySubject &&
+    progressData.progress.testsBySubject.length > 0
+      ? progressData.progress.testsBySubject.sort(
+          (a, b) => b.bestScore - a.bestScore
+        )[0]?.subject || "N/A"
+      : "N/A";
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">
@@ -198,13 +236,13 @@ function Dashboard() {
                 <div className="grid grid-cols-2 gap-4 mb-4">
                   <div className="text-center">
                     <div className="text-2xl font-bold text-gray-900">
-                      {testsDone}
+                      {formatValue(testsDone)}
                     </div>
                     <div className="text-sm text-gray-600">Tests Done</div>
                   </div>
                   <div className="text-center">
                     <div className="text-2xl font-bold text-gray-900">
-                      {avgScore.toFixed(0)}%
+                      {formatValue(avgScore, true)}
                     </div>
                     <div className="text-sm text-gray-600">Avg. Score</div>
                   </div>
@@ -223,30 +261,32 @@ function Dashboard() {
               <StatCard
                 icon={<BookOpen className="h-6 w-6" />}
                 title="Subjects Attempted"
-                value={subjectsMastered.toString()}
+                value={formatValue(subjectsMastered)}
                 subtitle="Total subjects with tests"
                 color="blue"
               />
               <StatCard
                 icon={<TrendingUp className="h-6 w-6" />}
                 title="High Score"
-                value={`${highScore.toFixed(0)}%`}
-                subtitle={`Achieved in ${highScoreSubject}`}
+                value={formatValue(highScore, true)}
+                subtitle={
+                  highScoreSubject !== "N/A"
+                    ? `Achieved in ${highScoreSubject}`
+                    : "No tests completed yet"
+                }
                 color="green"
               />
               <StatCard
                 icon={<BookOpen className="h-6 w-6" />}
                 title="Total Tests"
-                value={testsDone.toString()}
+                value={formatValue(testsDone)}
                 subtitle="Tests completed"
                 color="blue"
               />
               <StatCard
                 icon={<TrendingUp className="h-6 w-6" />}
                 title="Avg Accuracy"
-                value={`${(progressData?.progress.overallAccuracy || 0).toFixed(
-                  0
-                )}%`}
+                value={formatValue(overallAccuracy, true)}
                 subtitle="Overall accuracy"
                 color="green"
               />
@@ -270,6 +310,7 @@ function Dashboard() {
                   return (
                     <QuizCard
                       key={quiz.attemptId}
+                      attemptId={quiz.attemptId}
                       subject={subject}
                       score={`${quiz.percentage.toFixed(0)}%`}
                       date={date}
@@ -289,6 +330,7 @@ function Dashboard() {
                     return (
                       <QuizCard
                         key={quiz.attemptId}
+                        attemptId={quiz.attemptId}
                         subject={subject}
                         score={`${quiz.percentage.toFixed(0)}%`}
                         date={date}

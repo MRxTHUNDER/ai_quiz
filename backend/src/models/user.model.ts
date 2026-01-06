@@ -31,6 +31,19 @@ const userSchema = new Schema(
       maxLength: 100,
     },
 
+    phoneNumber: {
+      type: String,
+      required: true,
+      trim: true,
+      maxLength: 20,
+    },
+
+    entranceExamPreference: {
+      type: Schema.Types.ObjectId,
+      ref: "EntranceExam",
+      required: true,
+    },
+
     role: {
       type: String,
       enum: Object.values(UserRole),
@@ -39,7 +52,7 @@ const userSchema = new Schema(
   },
   {
     timestamps: true,
-  },
+  }
 );
 
 userSchema.index({ role: 1 }); // Query users by role

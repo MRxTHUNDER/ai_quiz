@@ -40,9 +40,9 @@ function Layout({ children }: LayoutProps) {
         </div>
       </header>
       {authUser && (
-        <div className="flex">
+        <div className="flex h-[calc(100vh-57px)]">
           <Sidebar />
-          <main className="flex-1">{children}</main>
+          <main className="flex-1 overflow-y-auto">{children}</main>
         </div>
       )}
       {!authUser && <main>{children}</main>}

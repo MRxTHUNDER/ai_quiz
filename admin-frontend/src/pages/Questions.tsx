@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   Card,
   CardContent,
@@ -9,14 +9,28 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { axiosInstance } from "@/lib/axios";
 import {
   getAllEntranceExams,
   getSubjectNamesFromExam,
   type EntranceExam,
 } from "@/lib/entranceExams";
+import { useAuthStore } from "@/store/useAuthStore";
+import QuestionsList, { type Question } from "@/components/QuestionsList";
+import QuestionsFilter from "@/components/QuestionsFilter";
+
+interface Pagination {
+  currentPage: number;
+  limit: number;
+  totalCount: number;
+  totalPages: number;
+  hasNextPage: boolean;
+  hasPrevPage: boolean;
+}
 
 export default function Questions() {
+  const authUser = useAuthStore((s) => s.authUser);
   const [entranceExams, setEntranceExams] = useState<EntranceExam[]>([]);
   const [loadingExams, setLoadingExams] = useState(true);
   const [filteredSubjects, setFilteredSubjects] = useState<string[]>([]);
@@ -31,6 +45,17 @@ export default function Questions() {
     type: "success" | "error" | null;
     message: string;
   }>({ type: null, message: "" });
+
+  // My Questions tab state
+  const [questions, setQuestions] = useState<Question[]>([]);
+  const [loadingQuestions, setLoadingQuestions] = useState(false);
+  const [pagination, setPagination] = useState<Pagination | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [activeTab, setActiveTab] = useState("generate");
+
+  // Filter state for "My Questions" tab
+  const [filterEntranceExamId, setFilterEntranceExamId] = useState<string>("");
+  const [filterSubjectId, setFilterSubjectId] = useState<string>("");
 
   // Fetch entrance exams on component mount
   useEffect(() => {
@@ -92,6 +117,77 @@ export default function Questions() {
       setSelectedFile(file);
       setStatus({ type: null, message: "" });
     }
+  };
+
+  // Fetch questions for "My Questions" tab
+  const fetchQuestions = useCallback(
+    async (page: number = 1) => {
+      const userId = authUser?.id || authUser?._id;
+
+      if (!userId) {
+        console.warn("No user ID available for fetching questions");
+        return;
+      }
+
+      setLoadingQuestions(true);
+      try {
+        // Build query parameters
+        const params = new URLSearchParams({
+          page: page.toString(),
+        });
+
+        if (filterEntranceExamId) {
+          params.append("entranceExamId", filterEntranceExamId);
+        }
+        if (filterSubjectId) {
+          params.append("subjectId", filterSubjectId);
+        }
+
+        const response = await axiosInstance.get(
+          `/question/by-creator/${userId}?${params.toString()}`
+        );
+
+        if (response.data?.success) {
+          setQuestions(response.data.data || []);
+          setPagination(response.data.pagination || null);
+          setCurrentPage(page);
+        } else {
+          // Handle case where response structure is different
+          setQuestions(response.data?.data || response.data || []);
+          setPagination(response.data?.pagination || null);
+        }
+      } catch (error) {
+        console.error("Failed to fetch questions:", error);
+        setQuestions([]);
+        setPagination(null);
+      } finally {
+        setLoadingQuestions(false);
+      }
+    },
+    [authUser?.id, authUser?._id, filterEntranceExamId, filterSubjectId]
+  );
+
+  // Fetch questions when switching to "My Questions" tab
+  useEffect(() => {
+    const userId = authUser?.id || authUser?._id;
+    if (activeTab === "my-questions" && userId) {
+      fetchQuestions(1);
+    }
+  }, [activeTab, fetchQuestions, authUser?.id, authUser?._id]);
+
+  // Handle filter changes
+  const handleFilterEntranceExamChange = (examId: string) => {
+    setFilterEntranceExamId(examId);
+    setFilterSubjectId(""); // Reset subject when exam changes
+  };
+
+  const handleFilterSubjectChange = (subjectId: string) => {
+    setFilterSubjectId(subjectId);
+  };
+
+  const handleResetFilters = () => {
+    setFilterEntranceExamId("");
+    setFilterSubjectId("");
   };
 
   const handleGenerate = async () => {
@@ -195,6 +291,11 @@ export default function Questions() {
       if (fileInput) {
         fileInput.value = "";
       }
+
+      // Refresh questions list if on "My Questions" tab
+      if (activeTab === "my-questions") {
+        fetchQuestions(1);
+      }
     } catch (error: unknown) {
       console.error("Generation error:", error);
       const errorMessage =
@@ -211,141 +312,233 @@ export default function Questions() {
   };
 
   return (
-    <div className="container mx-auto p-6 max-w-2xl">
-      <Card>
-        <CardHeader>
-          <CardTitle>Generate Questions</CardTitle>
-          <CardDescription>
-            Generate questions by uploading a PDF or by selecting entrance exam,
-            subject, and optional topic
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {/* Entrance Exam - Required */}
-          <div className="space-y-2">
-            <Label htmlFor="entrance-exam">
-              Entrance Exam <span className="text-red-500">*</span>
-            </Label>
-            <select
-              id="entrance-exam"
-              value={selectedEntranceExamId}
-              onChange={(e) => handleEntranceExamChange(e.target.value)}
-              disabled={loadingExams}
-              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm ring-offset-background focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <option value="">
-                {loadingExams ? "Loading exams..." : "Select an entrance exam"}
-              </option>
-              {entranceExams.map((exam) => (
-                <option key={exam._id} value={exam.entranceExamId}>
-                  {exam.entranceExamName}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Subject - Required */}
-          <div className="space-y-2">
-            <Label htmlFor="subject">
-              Subject <span className="text-red-500">*</span>
-            </Label>
-            <select
-              id="subject"
-              value={selectedSubject}
-              onChange={(e) => setSelectedSubject(e.target.value)}
-              disabled={
-                !selectedEntranceExamId || filteredSubjects.length === 0
-              }
-              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm ring-offset-background focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <option value="">
-                {selectedEntranceExamId
-                  ? filteredSubjects.length > 0
-                    ? "Select a subject"
-                    : "No subjects available"
-                  : "Select an entrance exam first"}
-              </option>
-              {filteredSubjects.map((subject) => (
-                <option key={subject} value={subject}>
-                  {subject}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Topic - Optional */}
-          <div className="space-y-2">
-            <Label htmlFor="topic">Topic (Optional)</Label>
-            <Input
-              id="topic"
-              type="text"
-              placeholder="e.g., Differential Calculus, Organic Chemistry"
-              value={topic}
-              onChange={(e) => setTopic(e.target.value)}
-            />
-            <p className="text-xs text-muted-foreground">
-              Specify a topic to focus the questions on a specific area
-            </p>
-          </div>
-
-          {/* PDF Upload - Optional */}
-          <div className="space-y-2">
-            <Label htmlFor="file-input">PDF File (Optional)</Label>
-            <Input
-              id="file-input"
-              type="file"
-              accept="application/pdf"
-              onChange={handleFileChange}
-            />
-            {selectedFile && (
-              <p className="text-sm text-muted-foreground">
-                Selected: {selectedFile.name}
-              </p>
-            )}
-            <p className="text-xs text-muted-foreground">
-              Upload a PDF to generate questions based on its content
-            </p>
-          </div>
-
-          {/* Number of Questions */}
-          <div className="space-y-2">
-            <Label htmlFor="num-questions">Number of Questions</Label>
-            <Input
-              id="num-questions"
-              type="number"
-              min="1"
-              max="100"
-              value={numQuestions}
-              onChange={(e) => setNumQuestions(parseInt(e.target.value) || 50)}
-            />
-            <p className="text-xs text-muted-foreground">
-              Default: 50 questions (max: 100)
-            </p>
-          </div>
-
-          {/* Status Messages */}
-          {status.type && (
-            <div
-              className={`p-3 rounded-md ${
-                status.type === "success"
-                  ? "bg-green-50 text-green-800"
-                  : "bg-red-50 text-red-800"
-              }`}
-            >
-              {status.message}
-            </div>
-          )}
-
-          {/* Generate Button */}
-          <Button
-            onClick={handleGenerate}
-            disabled={generating || !selectedSubject || !selectedEntranceExamId}
-            className="w-full"
+    <div className="container mx-auto p-6 max-w-4xl">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger
+            value="generate"
+            className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-semibold data-[state=active]:shadow-md"
           >
-            {generating ? "Generating..." : "Generate Questions"}
-          </Button>
-        </CardContent>
-      </Card>
+            Generate Questions
+          </TabsTrigger>
+          <TabsTrigger
+            value="my-questions"
+            className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-semibold data-[state=active]:shadow-md"
+          >
+            My Questions
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="generate" className="mt-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Generate Questions</CardTitle>
+              <CardDescription>
+                Generate questions by uploading a PDF or by selecting entrance
+                exam, subject, and optional topic
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Entrance Exam - Required */}
+              <div className="space-y-2">
+                <Label htmlFor="entrance-exam">
+                  Entrance Exam <span className="text-red-500">*</span>
+                </Label>
+                <select
+                  id="entrance-exam"
+                  value={selectedEntranceExamId}
+                  onChange={(e) => handleEntranceExamChange(e.target.value)}
+                  disabled={loadingExams}
+                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm ring-offset-background focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <option value="">
+                    {loadingExams
+                      ? "Loading exams..."
+                      : "Select an entrance exam"}
+                  </option>
+                  {entranceExams.map((exam) => (
+                    <option key={exam._id} value={exam.entranceExamId}>
+                      {exam.entranceExamName}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Subject - Required */}
+              <div className="space-y-2">
+                <Label htmlFor="subject">
+                  Subject <span className="text-red-500">*</span>
+                </Label>
+                <select
+                  id="subject"
+                  value={selectedSubject}
+                  onChange={(e) => setSelectedSubject(e.target.value)}
+                  disabled={
+                    !selectedEntranceExamId || filteredSubjects.length === 0
+                  }
+                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm ring-offset-background focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <option value="">
+                    {selectedEntranceExamId
+                      ? filteredSubjects.length > 0
+                        ? "Select a subject"
+                        : "No subjects available"
+                      : "Select an entrance exam first"}
+                  </option>
+                  {filteredSubjects.map((subject) => (
+                    <option key={subject} value={subject}>
+                      {subject}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Topic - Optional */}
+              <div className="space-y-2">
+                <Label htmlFor="topic">Topic (Optional)</Label>
+                <Input
+                  id="topic"
+                  type="text"
+                  placeholder="e.g., Differential Calculus, Organic Chemistry"
+                  value={topic}
+                  onChange={(e) => setTopic(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Specify a topic to focus the questions on a specific area
+                </p>
+              </div>
+
+              {/* PDF Upload - Optional */}
+              <div className="space-y-2">
+                <Label htmlFor="file-input">PDF File (Optional)</Label>
+                <Input
+                  id="file-input"
+                  type="file"
+                  accept="application/pdf"
+                  onChange={handleFileChange}
+                />
+                {selectedFile && (
+                  <p className="text-sm text-muted-foreground">
+                    Selected: {selectedFile.name}
+                  </p>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Upload a PDF to generate questions based on its content
+                </p>
+              </div>
+
+              {/* Number of Questions */}
+              <div className="space-y-2">
+                <Label htmlFor="num-questions">Number of Questions</Label>
+                <Input
+                  id="num-questions"
+                  type="number"
+                  min="1"
+                  max="100"
+                  value={numQuestions}
+                  onChange={(e) =>
+                    setNumQuestions(parseInt(e.target.value) || 50)
+                  }
+                />
+                <p className="text-xs text-muted-foreground">
+                  Default: 50 questions (max: 100)
+                </p>
+              </div>
+
+              {/* Status Messages */}
+              {status.type && (
+                <div
+                  className={`p-3 rounded-md ${
+                    status.type === "success"
+                      ? "bg-green-50 text-green-800"
+                      : "bg-red-50 text-red-800"
+                  }`}
+                >
+                  {status.message}
+                </div>
+              )}
+
+              {/* Generate Button */}
+              <Button
+                onClick={handleGenerate}
+                disabled={
+                  generating || !selectedSubject || !selectedEntranceExamId
+                }
+                className="w-full"
+              >
+                {generating ? "Generating..." : "Generate Questions"}
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="my-questions" className="mt-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>My Questions</CardTitle>
+              <CardDescription>
+                View all questions you have generated
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Filter Section */}
+              <QuestionsFilter
+                selectedEntranceExamId={filterEntranceExamId}
+                selectedSubjectId={filterSubjectId}
+                onEntranceExamChange={handleFilterEntranceExamChange}
+                onSubjectChange={handleFilterSubjectChange}
+                onReset={handleResetFilters}
+                loadingExams={false}
+              />
+
+              {/* Questions Count */}
+              {pagination && (
+                <div className="text-sm text-muted-foreground">
+                  Showing {questions.length} of {pagination.totalCount}{" "}
+                  questions
+                </div>
+              )}
+
+              {/* Scrollable Questions List Container */}
+              <div className="max-h-[800px] overflow-y-auto pr-2 border rounded-md p-4 bg-muted/20">
+                <QuestionsList
+                  questions={questions}
+                  loading={loadingQuestions}
+                  onQuestionUpdated={() => fetchQuestions(currentPage)}
+                  onQuestionDeleted={() => fetchQuestions(currentPage)}
+                />
+              </div>
+
+              {/* Pagination */}
+              {pagination && pagination.totalPages > 1 && (
+                <div className="flex items-center justify-between pt-4 border-t">
+                  <div className="text-sm text-muted-foreground">
+                    Page {pagination.currentPage} of {pagination.totalPages}
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => fetchQuestions(currentPage - 1)}
+                      disabled={!pagination.hasPrevPage}
+                    >
+                      Previous
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => fetchQuestions(currentPage + 1)}
+                      disabled={!pagination.hasNextPage}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

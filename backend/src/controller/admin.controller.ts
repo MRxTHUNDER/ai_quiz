@@ -206,7 +206,7 @@ export const AdminLogout = async (req: Request, res: Response) => {
 
 /**
  * Get all users with pagination and filtering
- * GET /admin/users?page=1&limit=10&search=john&role=user
+ * GET /admin/users?page=1&limit=10&search=john&role=user&entranceExamId=xxx&startDate=2024-01-01&endDate=2024-12-31
  */
 export const GetAllUsers = async (req: Request, res: Response) => {
   try {
@@ -214,8 +214,11 @@ export const GetAllUsers = async (req: Request, res: Response) => {
     const limit = Math.max(1, Math.min(100, parseInt(req.query.limit as string) || 10));
     const search = req.query.search as string;
     const role = req.query.role as string;
+    const entranceExamId = req.query.entranceExamId as string;
+    const startDate = req.query.startDate as string;
+    const endDate = req.query.endDate as string;
 
-    const result = await getAllUsers(page, limit, search, role);
+    const result = await getAllUsers(page, limit, search, role, entranceExamId, startDate, endDate);
 
     res.status(200).json({
       success: true,
