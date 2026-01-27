@@ -13,6 +13,8 @@ import UsersManagement from "@/pages/UsersManagement";
 import UserDetails from "@/pages/UserDetails";
 import { useAuthStore } from "@/store/useAuthStore";
 import Questions from "./pages/Questions";
+import UIManagement from "./pages/UIManagement";
+import AdminAuthRedirect from "@/components/AdminAuthRedirect";
 
 function Protected({ children }: { children: React.ReactNode }) {
   const authUser = useAuthStore((s) => s.authUser);
@@ -35,8 +37,22 @@ function App() {
     <Router>
       <Routes>
         {/* Public routes without Layout */}
-        <Route path="/login" element={<AdminLogin />} />
-        <Route path="/signup" element={<AdminSignup />} />
+        <Route
+          path="/login"
+          element={
+            <AdminAuthRedirect>
+              <AdminLogin />
+            </AdminAuthRedirect>
+          }
+        />
+        <Route
+          path="/signup"
+          element={
+            <AdminAuthRedirect>
+              <AdminSignup />
+            </AdminAuthRedirect>
+          }
+        />
 
         {/* Protected routes with Layout */}
         <Route
@@ -74,6 +90,14 @@ function App() {
                   element={
                     <Protected>
                       <UserDetails />
+                    </Protected>
+                  }
+                />
+                <Route
+                  path="ui-management"
+                  element={
+                    <Protected>
+                      <UIManagement />
                     </Protected>
                   }
                 />

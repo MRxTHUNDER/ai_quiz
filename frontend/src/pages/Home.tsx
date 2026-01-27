@@ -17,6 +17,7 @@ import {
   getSubjectNamesFromExam,
   type EntranceExam,
 } from "../lib/entranceExams";
+import { getUIFlags } from "../lib/uiFlags";
 
 const colorGradients = [
   "from-blue-600 to-indigo-600",
@@ -42,11 +43,21 @@ function Home() {
   const [entranceExams, setEntranceExams] = useState<EntranceExam[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedExamIndex, setSelectedExamIndex] = useState(0);
+  const [featuredExamNames, setFeaturedExamNames] = useState<string[]>([
+    "JEE",
+    "NEET",
+    "CET",
+    "CUET",
+  ]);
 
   useEffect(() => {
-    const fetchExams = async () => {
+    const fetchData = async () => {
       try {
-        const exams = await getAllEntranceExams();
+        const [exams, flags] = await Promise.all([
+          getAllEntranceExams(),
+          getUIFlags(),
+        ]);
+
         setEntranceExams(exams);
 
         // Find CUET exam and set it as default
@@ -57,14 +68,23 @@ function Home() {
           setCurrentSlide(cuetIndex);
           setSelectedExamIndex(cuetIndex);
         }
+
+        // Update featured exam names from backend if available
+        if (
+          flags.featuredExamNames &&
+          Array.isArray(flags.featuredExamNames) &&
+          flags.featuredExamNames.length > 0
+        ) {
+          setFeaturedExamNames(flags.featuredExamNames);
+        }
       } catch (error) {
-        console.error("Error fetching entrance exams:", error);
+        console.error("Error fetching entrance exams or UI flags:", error);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchExams();
+    fetchData();
   }, []);
 
   const nextSlide = useCallback(() => {
@@ -137,7 +157,15 @@ function Home() {
             <p className="text-lg md:text-xl text-gray-700 max-w-3xl mx-auto leading-relaxed">
               Hey! Are you a{" "}
               <span className="font-semibold text-blue-600">
-                JEE, NEET, CET, or CUET aspirant
+                {featuredExamNames.length > 0
+                  ? featuredExamNames.length === 1
+                    ? `${featuredExamNames[0]} aspirant`
+                    : `${featuredExamNames
+                        .slice(0, -1)
+                        .join(", ")}, or ${
+                        featuredExamNames[featuredExamNames.length - 1]
+                      } aspirant`
+                  : "JEE, NEET, CET, or CUET aspirant"}
               </span>
               ? <br />
               We’ve got you covered! Discover your true potential with{" "}
@@ -316,7 +344,11 @@ function Home() {
                 learning.
               </p>
               <div className="flex flex-col sm:flex-row gap-4">
-                <Button size="lg" className="shadow-xl">
+                <Button 
+                  size="lg" 
+                  className="shadow-xl"
+                  onClick={() => navigate("/start-test")}
+                >
                   Start Your Test
                 </Button>
                 {/*<Button variant="outline" size="lg">*/}
@@ -495,6 +527,7 @@ function Home() {
           <Button
             size="lg"
             className="bg-white text-blue-600 hover:bg-gray-50 shadow-xl"
+            onClick={() => navigate("/signup")}
           >
             Get Started Today
           </Button>

@@ -646,3 +646,91 @@ export const DeleteQuestion = async (req: Request, res: Response) => {
     });
   }
 };
+
+/**
+ * Delete multiple questions
+ * DELETE /question/bulk
+ * Body: { questionIds: string[] }
+ * Only admin or the question creator can delete
+ */
+export const DeleteQuestionsBulk = async (req: Request, res: Response) => {
+  try {
+    const { questionIds } = req.body;
+    const currentUserId = req.userId;
+    const currentUserRole = req.user?.role;
+
+    if (!questionIds || !Array.isArray(questionIds) || questionIds.length === 0) {
+      res.status(400).json({
+        success: false,
+        message: "Question IDs array is required",
+      });
+      return;
+    }
+
+    // Validate all IDs are valid MongoDB ObjectIds
+    const validIds = questionIds.filter((id) => mongoose.Types.ObjectId.isValid(id));
+    if (validIds.length === 0) {
+      res.status(400).json({
+        success: false,
+        message: "No valid question IDs provided",
+      });
+      return;
+    }
+
+    // Find all questions
+    const questions = await QuestionModel.find({
+      _id: { $in: validIds },
+    });
+
+    if (questions.length === 0) {
+      res.status(404).json({
+        success: false,
+        message: "No questions found",
+      });
+      return;
+    }
+
+    // Check authorization: only admin or question creator can delete
+    const isAdmin = currentUserRole === UserRole.ADMIN;
+    const questionsToDelete: string[] = [];
+    const unauthorizedIds: string[] = [];
+
+    for (const question of questions) {
+      const questionCreatorId = question.createdBy?.toString();
+      const isCreator = questionCreatorId === currentUserId;
+
+      if (isAdmin || isCreator) {
+        questionsToDelete.push(question._id.toString());
+      } else {
+        unauthorizedIds.push(question._id.toString());
+      }
+    }
+
+    if (questionsToDelete.length === 0) {
+      res.status(403).json({
+        success: false,
+        message: "You don't have permission to delete any of these questions",
+      });
+      return;
+    }
+
+    // Delete the questions
+    const deleteResult = await QuestionModel.deleteMany({
+      _id: { $in: questionsToDelete },
+    });
+
+    res.status(200).json({
+      success: true,
+      message: `Successfully deleted ${deleteResult.deletedCount} question(s)`,
+      deletedCount: deleteResult.deletedCount,
+      unauthorizedCount: unauthorizedIds.length,
+    });
+  } catch (error) {
+    console.error("Error deleting questions:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error deleting questions",
+      error: error instanceof Error ? error.message : "Unknown error",
+    });
+  }
+};

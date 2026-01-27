@@ -3,17 +3,31 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Menu, X, Zap, User, LogOut } from "lucide-react";
 import Button from "./Button";
 import { useAuthStore } from "../store/useAuthStore";
+import { getUIFlags, type UIFlags } from "../lib/uiFlags";
 
 function Navbar() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [uiFlags, setUiFlags] = useState<UIFlags>({ questionsPageEnabled: true });
   const location = useLocation();
   const navigate = useNavigate();
   const { authUser, logout, checkAuth, isCheckingAuth } = useAuthStore();
 
   useEffect(() => {
     checkAuth();
+    loadUIFlags();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const loadUIFlags = async () => {
+    try {
+      const flags = await getUIFlags();
+      setUiFlags(flags);
+    } catch (error) {
+      console.error("Error loading UI flags:", error);
+      // Default to enabled if error
+      setUiFlags({ questionsPageEnabled: true });
+    }
+  };
 
   const navItems = [
     { name: "Home", path: "/" },
@@ -22,7 +36,10 @@ function Navbar() {
   ];
 
   // Additional nav items only for authenticated users
-  const authNavItems = [{ name: "Questions", path: "/questions" }];
+  // Only show Questions if it's enabled
+  const authNavItems = uiFlags.questionsPageEnabled
+    ? [{ name: "Questions", path: "/questions" }]
+    : [];
 
   const isActive = (path: string) => location.pathname === path;
 

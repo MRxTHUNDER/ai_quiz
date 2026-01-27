@@ -98,6 +98,15 @@ You are an expert question generator specializing in ${entranceExamName} entranc
 
 Generate ${numQuestions} multiple-choice questions for the subject: ${subjectName}${topicText}
 
+LANGUAGE REQUIREMENT (CRITICAL - MUST FOLLOW STRICTLY):
+- If the subject name "${subjectName}" indicates this is a LANGUAGE subject (e.g., contains words like "Language", "Urdu", "Hindi", "English", "French", "Spanish", "German", "Arabic", "Sanskrit", or any language name), then:
+  - ALL questions MUST be written ENTIRELY in that specific language
+  - ALL question text, ALL options, and ALL correct answers MUST be in the same language
+  - DO NOT mix languages - every single word must be in the specified language
+  - If you generate even one question in a different language, the entire batch is incorrect
+  - This is MANDATORY and NON-NEGOTIABLE - 100% of questions must be in the specified language
+  - Check the subject name carefully - if it's a language subject, apply this rule to EVERY question without exception
+
 ENTRANCE EXAM QUESTION STANDARDS FOR ${entranceExamName}:
 - Questions must test DEEP CONCEPTUAL UNDERSTANDING, not just rote memorization
 - Include questions that require APPLICATION of concepts to solve real-world or theoretical problems
@@ -121,6 +130,16 @@ QUESTION QUALITY REQUIREMENTS:
 9. Questions should test both breadth and depth of knowledge in ${subjectName}
 10. Ensure questions are factually accurate and align with current ${entranceExamName} curriculum standards
 
+CORRECT ANSWER VALIDATION (MANDATORY - VERIFY BEFORE MARKING AS CORRECT):
+- BEFORE marking any option as "correctOption", you MUST verify it is factually, mathematically, and logically CORRECT
+- For calculation-based questions: Work through the problem step-by-step, verify all calculations, and confirm the answer is accurate
+- For conceptual questions: Verify the answer aligns with established facts, principles, and current knowledge in the field
+- For application questions: Ensure the answer correctly applies the concept to the given scenario
+- Double-check: The correctOption MUST be the ONLY definitively correct answer among the 4 options
+- Verify: The correctOption string must EXACTLY match one of the Options (character-by-character, including spaces and punctuation)
+- If you are uncertain about correctness, DO NOT mark it as correct - generate a different question instead
+- This is CRITICAL: Incorrect answers marked as correct will mislead students and damage the quality of the exam
+
 REQUIREMENTS:
 1. Generate EXACTLY ${numQuestions} high-quality questions
 2. Questions must match ${entranceExamName} exam pattern, difficulty level, and question style
@@ -129,6 +148,11 @@ REQUIREMENTS:
     }
 4. Each question must have exactly 4 options
 5. Return ONLY valid JSON array - no markdown, no explanations, no additional text
+6. VERIFICATION STEP: Before finalizing each question, verify the correctOption is actually correct by:
+   - Solving/answering the question yourself
+   - Checking calculations if numerical
+   - Verifying facts if conceptual
+   - Ensuring the answer is unambiguous and definitively correct
 
 JSON FORMAT:
 [
@@ -146,6 +170,7 @@ IMPORTANT:
 - All strings must be properly JSON-escaped
 - For LaTeX/math notation, use double backslashes: \\\\
 - Ensure questions are suitable for competitive entrance exam preparation
+- FINAL CHECK: Before returning the JSON, verify EVERY correctOption is factually correct - do not guess or assume
 
 Return ONLY the JSON array. No markdown code blocks, no explanations, no additional commentary.
 `;

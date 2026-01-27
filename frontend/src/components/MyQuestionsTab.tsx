@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { axiosInstance } from "../lib/axio";
 import { getAllEntranceExams, getSubjectIdFromExam, type EntranceExam } from "../lib/entranceExams";
 import { Loader2, ChevronLeft, ChevronRight } from "lucide-react";
+import MathRenderer from "./MathRenderer";
 
 interface Question {
   id: string;
@@ -282,7 +283,9 @@ export default function MyQuestionsTab() {
                           <span className="font-medium text-gray-700 mr-2">
                             {optionLabel})
                           </span>
-                          <span className="text-gray-900">{option}</span>
+                          <span className="text-gray-900">
+                            <MathRenderer text={option} />
+                          </span>
                           {isCorrect && (
                             <span className="ml-auto px-2 py-1 text-xs font-medium bg-green-600 text-white rounded">
                               Correct

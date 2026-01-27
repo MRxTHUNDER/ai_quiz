@@ -1,6 +1,6 @@
 import { Link, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import { Upload, BookOpen, Users } from "lucide-react";
+import { Upload, BookOpen, Users, Palette } from "lucide-react";
 
 const navigation = [
   {
@@ -18,6 +18,11 @@ const navigation = [
     href: "/exams",
     icon: BookOpen,
   },
+  {
+    name: "UI Management",
+    href: "/ui-management",
+    icon: Palette,
+  },
 ];
 
 export function Sidebar() {
@@ -29,10 +34,7 @@ export function Sidebar() {
         {navigation.map((item) => {
           const isActive =
             location.pathname === item.href ||
-            (item.href === "/users" &&
-              location.pathname.startsWith("/users")) ||
-            (item.href === "/questions" &&
-              location.pathname.startsWith("/questions"));
+            location.pathname.startsWith(item.href + "/");
           return (
             <Link
               key={item.name}
@@ -40,7 +42,7 @@ export function Sidebar() {
               className={cn(
                 "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
                 isActive
-                  ? "bg-primary text-primary-foreground"
+                  ? "bg-gray-100 text-foreground font-semibold"
                   : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
               )}
             >

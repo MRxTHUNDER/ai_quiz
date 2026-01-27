@@ -109,7 +109,10 @@ function StartTest() {
                     <div className="text-sm text-gray-600">Avg. Score</div>
                   </div>
                 </div>
-                <button className="text-blue-600 text-sm font-medium hover:text-blue-700">
+                <button 
+                  onClick={() => navigate("/dashboard")}
+                  className="text-blue-600 text-sm font-medium hover:text-blue-700"
+                >
                   View Profile
                 </button>
               </div>

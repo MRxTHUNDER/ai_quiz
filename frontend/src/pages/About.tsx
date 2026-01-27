@@ -1,10 +1,13 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Lightbulb, GraduationCap, Code, Users, Target, Palette, Monitor } from 'lucide-react';
 import TeamCard from '../components/TeamCard';
 import ValueCard from '../components/ValueCard';
 import Button from '../components/Button';
 
 function About() {
+  const navigate = useNavigate();
+  
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Hero Section */}
@@ -120,7 +123,10 @@ function About() {
           <p className="text-xl text-blue-100 mb-8 leading-relaxed">
             We're always looking for passionate individuals to help us revolutionize the way students learn. If you're excited about education and AI, check out our career opportunities.
           </p>
-          <Button className="bg-white text-blue-600 hover:bg-gray-50">
+          <Button 
+            className="bg-white text-blue-600 hover:bg-gray-50"
+            onClick={() => navigate("/contact")}
+          >
             Explore Careers
           </Button>
         </div>

@@ -7,12 +7,14 @@ import {
   BookOpen,
   Eye,
   ChevronRight,
+  GripVertical,
 } from "lucide-react";
 import {
   getAllEntranceExams,
   createEntranceExam,
   updateEntranceExam,
   deleteEntranceExam,
+  updateExamOrder,
   type EntranceExam,
   type CreateExamData,
 } from "@/lib/entranceExams";
@@ -28,10 +30,155 @@ import {
   DialogClose,
   DialogDescription,
 } from "@/components/ui/dialog";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  rectSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 interface SubjectInput {
   subjectName: string;
   durationMinutes: number;
+  isEnabled: boolean;
+}
+
+// Sortable Exam Card Component
+function SortableExamCard({
+  exam,
+  onEdit,
+  onDelete,
+  onToggleEnabled,
+  onViewSubjects,
+  formatDuration,
+}: {
+  exam: EntranceExam;
+  onEdit: (exam: EntranceExam) => void;
+  onDelete: (id: string, name: string) => void;
+  onToggleEnabled: (exam: EntranceExam) => void;
+  onViewSubjects: (exam: EntranceExam) => void;
+  formatDuration: (minutes: number) => string;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: exam._id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <Card
+      ref={setNodeRef}
+      style={style}
+      className="hover:shadow-lg transition-shadow flex flex-col"
+    >
+      <CardHeader>
+        <div className="flex items-start justify-between">
+          <div className="flex items-start gap-2 flex-1">
+            <button
+              {...attributes}
+              {...listeners}
+              className="cursor-grab active:cursor-grabbing p-1 hover:bg-muted rounded"
+              aria-label="Drag to reorder"
+            >
+              <GripVertical className="h-5 w-5 text-muted-foreground" />
+            </button>
+            <div className="flex-1">
+              <CardTitle className="text-xl mb-1">
+                {exam.entranceExamName}
+              </CardTitle>
+              <p className="text-sm text-muted-foreground">
+                ID: {exam.entranceExamId}
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-2 items-center">
+            <Button
+              variant={exam.isEnabled === false ? "destructive" : "default"}
+              size="sm"
+              onClick={async (e) => {
+                e.stopPropagation();
+                onToggleEnabled(exam);
+              }}
+              className={
+                exam.isEnabled === false
+                  ? "bg-red-500 hover:bg-red-600 text-white"
+                  : "bg-emerald-500 hover:bg-emerald-600 text-white"
+              }
+            >
+              {exam.isEnabled === false ? "Disabled" : "Enabled"}
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              disabled={exam.isEnabled === false}
+              onClick={(e) => {
+                if (exam.isEnabled === false) return;
+                e.stopPropagation();
+                onEdit(exam);
+              }}
+              className="h-8 w-8 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <Edit className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete(exam._id, exam.entranceExamName);
+              }}
+              className="h-8 w-8 text-destructive hover:text-destructive"
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4 flex-1 flex flex-col">
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 text-sm">
+            <Clock className="h-4 w-4 text-muted-foreground" />
+            <span className="font-medium">Total Duration:</span>
+            <span>{formatDuration(exam.durationMinutes)}</span>
+          </div>
+          <div className="flex items-center gap-2 text-sm">
+            <BookOpen className="h-4 w-4 text-muted-foreground" />
+            <span className="font-medium">Subjects:</span>
+            <span className="font-semibold">{exam.subjects.length}</span>
+          </div>
+        </div>
+
+        <Button
+          variant="outline"
+          className="w-full mt-auto"
+          onClick={() => onViewSubjects(exam)}
+        >
+          <Eye className="h-4 w-4 mr-2" />
+          View Subjects
+          <ChevronRight className="h-4 w-4 ml-auto" />
+        </Button>
+      </CardContent>
+    </Card>
+  );
 }
 
 export default function ExamsManagement() {
@@ -43,6 +190,15 @@ export default function ExamsManagement() {
   const [editingExam, setEditingExam] = useState<EntranceExam | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isReordering, setIsReordering] = useState(false);
+
+  // Drag and drop sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
 
   // Form state
   const [formData, setFormData] = useState({
@@ -50,9 +206,10 @@ export default function ExamsManagement() {
     entranceExamId: "",
     durationMinutes: "",
     notes: "",
+    isEnabled: "true",
   });
   const [subjects, setSubjects] = useState<SubjectInput[]>([
-    { subjectName: "", durationMinutes: 0 },
+    { subjectName: "", durationMinutes: 0, isEnabled: true },
   ]);
 
   useEffect(() => {
@@ -79,8 +236,9 @@ export default function ExamsManagement() {
       entranceExamId: "",
       durationMinutes: "",
       notes: "",
+      isEnabled: "true",
     });
-    setSubjects([{ subjectName: "", durationMinutes: 0 }]);
+    setSubjects([{ subjectName: "", durationMinutes: 0, isEnabled: true }]);
     setError(null);
     setIsDialogOpen(true);
   };
@@ -92,11 +250,13 @@ export default function ExamsManagement() {
       entranceExamId: exam.entranceExamId,
       durationMinutes: exam.durationMinutes.toString(),
       notes: exam.notes || "",
+      isEnabled: exam.isEnabled === false ? "false" : "true",
     });
     setSubjects(
       exam.subjects.map((sub) => ({
         subjectName: sub.subject.subjectName,
         durationMinutes: sub.durationMinutes,
+        isEnabled: sub.isEnabled !== false,
       }))
     );
     setError(null);
@@ -104,7 +264,10 @@ export default function ExamsManagement() {
   };
 
   const handleAddSubject = () => {
-    setSubjects([...subjects, { subjectName: "", durationMinutes: 0 }]);
+    setSubjects([
+      ...subjects,
+      { subjectName: "", durationMinutes: 0, isEnabled: true },
+    ]);
   };
 
   const handleRemoveSubject = (index: number) => {
@@ -114,7 +277,7 @@ export default function ExamsManagement() {
   const handleSubjectChange = (
     index: number,
     field: keyof SubjectInput,
-    value: string | number
+    value: string | number | boolean
   ) => {
     const updated = [...subjects];
     updated[index] = { ...updated[index], [field]: value };
@@ -145,15 +308,17 @@ export default function ExamsManagement() {
     setIsSubmitting(true);
 
     try {
-      const examData: CreateExamData = {
+      const examData = {
         entranceExamName: formData.entranceExamName,
         entranceExamId: formData.entranceExamId,
         durationMinutes: parseInt(formData.durationMinutes),
         subjects: subjects.map((s) => ({
           subjectName: s.subjectName,
           durationMinutes: s.durationMinutes,
+          isEnabled: s.isEnabled,
         })),
         notes: formData.notes || undefined,
+        isEnabled: formData.isEnabled === "true",
       };
 
       if (editingExam) {
@@ -210,6 +375,61 @@ export default function ExamsManagement() {
     return `${mins}m`;
   };
 
+  // Swap two items in an array
+  const swapItems = <T,>(array: T[], index1: number, index2: number): T[] => {
+    const newArray = [...array];
+    [newArray[index1], newArray[index2]] = [newArray[index2], newArray[index1]];
+    return newArray;
+  };
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (!over || active.id === over.id) {
+      return;
+    }
+
+    const oldIndex = exams.findIndex((exam) => exam._id === active.id);
+    const newIndex = exams.findIndex((exam) => exam._id === over.id);
+
+    if (oldIndex === -1 || newIndex === -1) {
+      return;
+    }
+
+    // Swap the two items instead of shifting
+    const newExams = swapItems(exams, oldIndex, newIndex);
+    setExams(newExams);
+
+    // Update displayOrder in backend
+    try {
+      setIsReordering(true);
+      const examOrders = newExams.map((exam, index) => ({
+        examId: exam._id,
+        displayOrder: index,
+      }));
+
+      await updateExamOrder(examOrders);
+    } catch (error) {
+      console.error("Failed to update exam order:", error);
+      // Revert on error
+      await fetchExams();
+      alert("Failed to update exam order. Please try again.");
+    } finally {
+      setIsReordering(false);
+    }
+  };
+
+  const handleToggleEnabled = async (exam: EntranceExam) => {
+    try {
+      await updateEntranceExam(exam._id, {
+        isEnabled: exam.isEnabled === false,
+      } as Partial<CreateExamData>);
+      await fetchExams();
+    } catch (err) {
+      console.error("Failed to toggle exam status:", err);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[80vh]">
@@ -248,77 +468,30 @@ export default function ExamsManagement() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {exams.map((exam) => (
-            <Card
-              key={exam._id}
-              className="hover:shadow-lg transition-shadow flex flex-col"
-            >
-              <CardHeader>
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <CardTitle className="text-xl mb-1">
-                      {exam.entranceExamName}
-                    </CardTitle>
-                    <p className="text-sm text-muted-foreground">
-                      ID: {exam.entranceExamId}
-                    </p>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openEditDialog(exam);
-                      }}
-                      className="h-8 w-8"
-                    >
-                      <Edit className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDelete(exam._id, exam.entranceExamName);
-                      }}
-                      className="h-8 w-8 text-destructive hover:text-destructive"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4 flex-1 flex flex-col">
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2 text-sm">
-                    <Clock className="h-4 w-4 text-muted-foreground" />
-                    <span className="font-medium">Total Duration:</span>
-                    <span>{formatDuration(exam.durationMinutes)}</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-sm">
-                    <BookOpen className="h-4 w-4 text-muted-foreground" />
-                    <span className="font-medium">Subjects:</span>
-                    <span className="font-semibold">
-                      {exam.subjects.length}
-                    </span>
-                  </div>
-                </div>
-
-                <Button
-                  variant="outline"
-                  className="w-full mt-auto"
-                  onClick={() => openSubjectsDialog(exam)}
-                >
-                  <Eye className="h-4 w-4 mr-2" />
-                  View Subjects
-                  <ChevronRight className="h-4 w-4 ml-auto" />
-                </Button>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleDragEnd}
+        >
+          <SortableContext
+            items={exams.map((exam) => exam._id)}
+            strategy={rectSortingStrategy}
+          >
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {exams.map((exam) => (
+                <SortableExamCard
+                  key={exam._id}
+                  exam={exam}
+                  onEdit={openEditDialog}
+                  onDelete={handleDelete}
+                  onToggleEnabled={handleToggleEnabled}
+                  onViewSubjects={openSubjectsDialog}
+                  formatDuration={formatDuration}
+                />
+              ))}
+            </div>
+          </SortableContext>
+        </DndContext>
       )}
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
@@ -372,22 +545,45 @@ export default function ExamsManagement() {
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="durationMinutes">
-                Total Duration (minutes){" "}
-                <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                id="durationMinutes"
-                type="number"
-                min="1"
-                value={formData.durationMinutes}
-                onChange={(e) =>
-                  setFormData({ ...formData, durationMinutes: e.target.value })
-                }
-                placeholder="e.g., 180"
-                required
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="durationMinutes">
+                  Total Duration (minutes){" "}
+                  <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  id="durationMinutes"
+                  type="number"
+                  min="1"
+                  value={formData.durationMinutes}
+                  onChange={(e) =>
+                    setFormData({ ...formData, durationMinutes: e.target.value })
+                  }
+                  placeholder="e.g., 180"
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="examEnabled">Exam Status</Label>
+                <Button
+                  type="button"
+                  id="examEnabled"
+                  size="sm"
+                  onClick={() =>
+                    setFormData({
+                      ...formData,
+                      isEnabled: formData.isEnabled === "true" ? "false" : "true",
+                    })
+                  }
+                  className={
+                    formData.isEnabled === "true"
+                      ? "bg-emerald-500 hover:bg-emerald-600 text-white"
+                      : "bg-red-500 hover:bg-red-600 text-white"
+                  }
+                >
+                  {formData.isEnabled === "true" ? "Enabled" : "Disabled"}
+                </Button>
+              </div>
             </div>
 
             <div className="space-y-2">
@@ -434,6 +630,20 @@ export default function ExamsManagement() {
                         required
                       />
                     </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() =>
+                        handleSubjectChange(index, "isEnabled", !subject.isEnabled)
+                      }
+                      className={
+                        subject.isEnabled
+                          ? "bg-emerald-500 hover:bg-emerald-600 text-white"
+                          : "bg-red-500 hover:bg-red-600 text-white"
+                      }
+                    >
+                      {subject.isEnabled ? "Enabled" : "Disabled"}
+                    </Button>
                     {subjects.length > 1 && (
                       <Button
                         type="button"
@@ -546,12 +756,62 @@ export default function ExamsManagement() {
                         <span className="font-medium">
                           {sub.subject.subjectName}
                         </span>
+                        <span
+                          className={`text-xs ${
+                            sub.isEnabled === false
+                              ? "text-destructive"
+                              : "text-emerald-600"
+                          }`}
+                        >
+                          {sub.isEnabled === false ? "Disabled" : "Enabled"}
+                        </span>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-3">
                         <Clock className="h-4 w-4 text-muted-foreground" />
                         <span className="font-medium">
                           {formatDuration(sub.durationMinutes)}
                         </span>
+                        <Button
+                          size="sm"
+                          onClick={async () => {
+                            if (!viewingExam) return;
+                            try {
+                              const updatedSubjects = viewingExam.subjects.map(
+                                (s, i) => ({
+                                  subjectName: s.subject.subjectName,
+                                  durationMinutes: s.durationMinutes,
+                                  totalQuestions:
+                                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                    (s as any).totalQuestions ?? 50,
+                                  isEnabled:
+                                    i === idx ? sub.isEnabled === false : s.isEnabled !== false,
+                                })
+                              );
+
+                              await updateEntranceExam(viewingExam._id, {
+                                entranceExamName: viewingExam.entranceExamName,
+                                entranceExamId: viewingExam.entranceExamId,
+                                durationMinutes: viewingExam.durationMinutes,
+                                notes: viewingExam.notes,
+                                subjects: updatedSubjects,
+                              });
+
+                              await fetchExams();
+                            } catch (err) {
+                              console.error(
+                                "Failed to toggle subject status:",
+                                err
+                              );
+                            }
+                          }}
+                          className={
+                            sub.isEnabled === false
+                              ? "bg-red-500 hover:bg-red-600 text-white"
+                              : "bg-emerald-500 hover:bg-emerald-600 text-white"
+                          }
+                        >
+                          {sub.isEnabled === false ? "Disabled" : "Enabled"}
+                        </Button>
                       </div>
                     </div>
                   ))}
@@ -559,16 +819,18 @@ export default function ExamsManagement() {
               </div>
 
               <div className="flex justify-end gap-2 pt-2">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setIsSubjectsDialogOpen(false);
-                    openEditDialog(viewingExam);
-                  }}
-                >
-                  <Edit className="h-4 w-4 mr-2" />
-                  Edit Exam
-                </Button>
+                {viewingExam.isEnabled !== false && (
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setIsSubjectsDialogOpen(false);
+                      openEditDialog(viewingExam);
+                    }}
+                  >
+                    <Edit className="h-4 w-4 mr-2" />
+                    Edit Exam
+                  </Button>
+                )}
                 <Button onClick={() => setIsSubjectsDialogOpen(false)}>
                   Close
                 </Button>

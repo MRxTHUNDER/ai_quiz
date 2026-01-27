@@ -14,6 +14,18 @@ const entranceExam = new Schema(
       unique: true,
     },
 
+    // Controls whether this exam is visible/usable in the user-facing UI
+    isEnabled: {
+      type: Boolean,
+      default: true,
+    },
+
+    // Display order for sorting exams (lower number = appears first)
+    displayOrder: {
+      type: Number,
+      default: 0,
+    },
+
     durationMinutes: {
       type: Number,
       required: true,
@@ -34,6 +46,12 @@ const entranceExam = new Schema(
           type: Number,
           required: true,
           default: 50, // Default to 50 questions if not specified
+        },
+
+        // Optional per-exam subject visibility flag
+        isEnabled: {
+          type: Boolean,
+          default: true,
         },
       },
     ],
@@ -62,5 +80,6 @@ const entranceExam = new Schema(
 
 // entranceExamName and entranceExamId already have indexes from unique: true
 entranceExam.index({ createdAt: -1 }); // Get newest exams first
+entranceExam.index({ displayOrder: 1 }); // Sort by display order
 
 export const EntranceExam = model("EntranceExam", entranceExam);

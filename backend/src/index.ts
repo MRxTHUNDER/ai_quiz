@@ -13,6 +13,7 @@ import { SubjectRouter } from "./routes/subject.routes";
 import { TestRouter } from "./routes/test.routes";
 import { UploadPdfRouter } from "./routes/uploadPdf.routes";
 import { UserRouter } from "./routes/user.routes";
+import { UIFlagsRouter } from "./routes/uiFlags.routes";
 
 const app = express();
 
@@ -57,6 +58,7 @@ app.use("/api/v1/subject", SubjectRouter);
 app.use("/api/v1/entrance-exam", EntranceExamRouter);
 app.use("/api/v1/upload", UploadPdfRouter);
 app.use("/api/v1/dev", DevRouter);
+app.use("/api/v1/ui-flags", UIFlagsRouter);
 
 app.listen(PORT, () => {
   console.log(`Server in running on port ${PORT}`);

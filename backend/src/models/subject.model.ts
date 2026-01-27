@@ -15,6 +15,12 @@ const subjectSchema = new Schema(
     key: {
       type: String,
     },
+
+    // Controls whether this subject is available for selection in exams/tests
+    isEnabled: {
+      type: Boolean,
+      default: true,
+    },
   },
 
   { timestamps: true },

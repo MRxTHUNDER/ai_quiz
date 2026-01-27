@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import Button from "../components/Button";
 import { testApi, Question, TestProgress } from "../lib/testApi";
+import MathRenderer from "../components/MathRenderer";
 
 interface AnswerState {
   [questionId: string]: string;
@@ -393,7 +394,9 @@ function TakeTest() {
                           <span className="font-medium text-gray-700 mr-2">
                             {optionLabel})
                           </span>
-                          <span className="text-gray-900">{option}</span>
+                          <span className="text-gray-900">
+                            <MathRenderer text={option} />
+                          </span>
                         </div>
                       </button>
                     );

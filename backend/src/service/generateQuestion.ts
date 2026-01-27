@@ -371,6 +371,15 @@ COMPETITIVE ENTRANCE EXAM QUESTION STANDARDS:
 - Include questions that require multi-step reasoning, critical thinking, and problem-solving
 - Questions must match the complexity and rigor of actual competitive entrance exam questions
 
+LANGUAGE REQUIREMENT (CRITICAL - MUST FOLLOW STRICTLY):
+- If the subject name indicates this is a LANGUAGE subject (e.g., contains words like "Language", "Urdu", "Hindi", "English", "French", "Spanish", "German", "Arabic", "Sanskrit", or any language name), then:
+  - ALL questions MUST be written ENTIRELY in that specific language
+  - ALL question text, ALL options, and ALL correct answers MUST be in the same language
+  - DO NOT mix languages - every single word must be in the specified language
+  - If you generate even one question in a different language, the entire batch is incorrect
+  - This is MANDATORY and NON-NEGOTIABLE - 100% of questions must be in the specified language
+  - Check the subject name carefully - if it's a language subject, apply this rule to EVERY question without exception
+
 QUESTION QUALITY REQUIREMENTS:
 1. Question text must be clear, concise, and grammatically correct
 2. All 4 options must be plausible and well-constructed
@@ -381,6 +390,16 @@ QUESTION QUALITY REQUIREMENTS:
 7. Questions should be solvable within 1-3 minutes for an average student
 8. Include variety: conceptual questions, calculation-based, application-based, and analysis-based
 
+CORRECT ANSWER VALIDATION (MANDATORY - VERIFY BEFORE MARKING AS CORRECT):
+- BEFORE marking any option as "correctOption", you MUST verify it is factually, mathematically, and logically CORRECT
+- For calculation-based questions: Work through the problem step-by-step, verify all calculations, and confirm the answer is accurate
+- For conceptual questions: Verify the answer aligns with established facts, principles, and current knowledge in the field
+- For application questions: Ensure the answer correctly applies the concept to the given scenario
+- Double-check: The correctOption MUST be the ONLY definitively correct answer among the 4 options
+- Verify: The correctOption string must EXACTLY match one of the Options (character-by-character, including spaces and punctuation)
+- If you are uncertain about correctness, DO NOT mark it as correct - generate a different question instead
+- This is CRITICAL: Incorrect answers marked as correct will mislead students and damage the quality of the exam
+
 CRITICAL REQUIREMENTS:
 1. Generate EXACTLY ${batchSize} questions${batchInfo}
 2. Return ONLY a valid JSON array - no markdown, no explanations, no extra text
@@ -389,6 +408,11 @@ CRITICAL REQUIREMENTS:
    - "questionsText": The question text (string) - must be clear and complete
    - "Options": An array of exactly 4 strings - all must be plausible answers
    - "correctOption": The correct answer as a string (must match one of the Options exactly)
+5. VERIFICATION STEP: Before finalizing each question, verify the correctOption is actually correct by:
+   - Solving/answering the question yourself
+   - Checking calculations if numerical
+   - Verifying facts if conceptual
+   - Ensuring the answer is unambiguous and definitively correct
 
 JSON FORMATTING RULES:
 - All strings must be properly escaped for JSON
@@ -529,6 +553,15 @@ export const GenerateAIQuestions = async (
     const prompt = `
 You are an expert COMPETITIVE ENTRANCE EXAM question generator specializing in high-stakes entrance examinations. Analyze the provided previous year question paper from a competitive entrance examination and generate new questions that match the exact format, style, difficulty level, and question patterns typical of competitive entrance examinations (such as NEET, JEE, CUET, CLAT, CAT, etc.).
 
+LANGUAGE REQUIREMENT (CRITICAL - MUST FOLLOW STRICTLY):
+- If the subject name indicates this is a LANGUAGE subject (e.g., contains words like "Language", "Urdu", "Hindi", "English", "French", "Spanish", "German", "Arabic", "Sanskrit", or any language name), then:
+  - ALL questions MUST be written ENTIRELY in that specific language
+  - ALL question text, ALL options, and ALL correct answers MUST be in the same language
+  - DO NOT mix languages - every single word must be in the specified language
+  - If you generate even one question in a different language, the entire batch is incorrect
+  - This is MANDATORY and NON-NEGOTIABLE - 100% of questions must be in the specified language
+  - Check the subject name carefully - if it's a language subject, apply this rule to EVERY question without exception
+
 COMPETITIVE ENTRANCE EXAM QUESTION STANDARDS:
 - Questions must test CONCEPTUAL UNDERSTANDING, not just memorization
 - Include questions that require APPLICATION of concepts to solve complex problems
@@ -549,6 +582,16 @@ QUESTION QUALITY REQUIREMENTS:
 7. Questions should be solvable within 1-3 minutes for an average student
 8. Include variety: conceptual questions, calculation-based, application-based, and analysis-based
 
+CORRECT ANSWER VALIDATION (MANDATORY - VERIFY BEFORE MARKING AS CORRECT):
+- BEFORE marking any option as "correctOption", you MUST verify it is factually, mathematically, and logically CORRECT
+- For calculation-based questions: Work through the problem step-by-step, verify all calculations, and confirm the answer is accurate
+- For conceptual questions: Verify the answer aligns with established facts, principles, and current knowledge in the field
+- For application questions: Ensure the answer correctly applies the concept to the given scenario
+- Double-check: The correctOption MUST be the ONLY definitively correct answer among the 4 options
+- Verify: The correctOption string must EXACTLY match one of the Options (character-by-character, including spaces and punctuation)
+- If you are uncertain about correctness, DO NOT mark it as correct - generate a different question instead
+- This is CRITICAL: Incorrect answers marked as correct will mislead students and damage the quality of the exam
+
 CRITICAL REQUIREMENTS:
 1. Generate the same number of questions as in the provided PDF
 2. Return ONLY a valid JSON array - no markdown, no explanations, no extra text
@@ -557,6 +600,11 @@ CRITICAL REQUIREMENTS:
    - "questionsText": The question text (string) - must be clear and complete
    - "Options": An array of exactly 4 strings - all must be plausible answers
    - "correctOption": The correct answer as a string (must match one of the Options exactly)
+5. VERIFICATION STEP: Before finalizing each question, verify the correctOption is actually correct by:
+   - Solving/answering the question yourself
+   - Checking calculations if numerical
+   - Verifying facts if conceptual
+   - Ensuring the answer is unambiguous and definitively correct
 
 JSON FORMATTING RULES:
 - All strings must be properly escaped for JSON

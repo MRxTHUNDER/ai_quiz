@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { CheckCircle2, XCircle, Clock, Trophy, ArrowLeft, Loader2, AlertCircle } from "lucide-react";
 import Button from "../components/Button";
 import { testApi, TestResult as TestResultType } from "../lib/testApi";
+import MathRenderer from "../components/MathRenderer";
 
 function TestResult() {
   const navigate = useNavigate();
@@ -230,7 +231,7 @@ function TestResult() {
                   {isExpanded && (
                     <div className="p-4 bg-gray-50 border-t">
                       <p className="font-medium text-gray-900 mb-4">
-                        {answer.questionText}
+                        <MathRenderer text={answer.questionText} />
                       </p>
 
                       <div className="space-y-2 mb-4">
@@ -254,7 +255,9 @@ function TestResult() {
                                 <span className="font-medium mr-2">
                                   {optionLabel})
                                 </span>
-                                <span>{option}</span>
+                                <span>
+                                  <MathRenderer text={option} />
+                                </span>
                                 {isCorrect && (
                                   <CheckCircle2 className="h-5 w-5 text-green-600 ml-auto" />
                                 )}

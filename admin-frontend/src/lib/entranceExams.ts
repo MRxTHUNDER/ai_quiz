@@ -5,8 +5,10 @@ export interface Subject {
     _id: string;
     subjectName: string;
     testDuration: number;
+    isEnabled?: boolean;
   };
   durationMinutes: number;
+  isEnabled?: boolean;
 }
 
 export interface EntranceExam {
@@ -16,6 +18,8 @@ export interface EntranceExam {
   durationMinutes: number;
   subjects: Subject[];
   notes?: string;
+  isEnabled?: boolean;
+  displayOrder?: number;
 }
 
 export interface EntranceExamsResponse {
@@ -29,7 +33,7 @@ export interface EntranceExamsResponse {
 export async function getAllEntranceExams(): Promise<EntranceExam[]> {
   try {
     const response = await axiosInstance.get<EntranceExamsResponse>(
-      "/entrance-exam"
+      "/entrance-exam?includeDisabled=true"
     );
     return response.data.exams || [];
   } catch (error) {
@@ -46,7 +50,7 @@ export async function getEntranceExamById(id: string): Promise<EntranceExam> {
     const response = await axiosInstance.get<{
       message: string;
       exam: EntranceExam;
-    }>(`/entrance-exam/${id}`);
+    }>(`/entrance-exam/${id}?includeDisabled=true`);
     return response.data.exam;
   } catch (error) {
     console.error("Error fetching entrance exam:", error);
@@ -91,8 +95,10 @@ export interface CreateExamData {
   subjects: Array<{
     subjectName: string;
     durationMinutes: number;
+    isEnabled?: boolean;
   }>;
   notes?: string;
+  isEnabled?: boolean;
 }
 
 /**
@@ -140,6 +146,20 @@ export async function deleteEntranceExam(id: string): Promise<void> {
     await axiosInstance.delete(`/entrance-exam/${id}`);
   } catch (error) {
     console.error("Error deleting entrance exam:", error);
+    throw error;
+  }
+}
+
+/**
+ * Update the display order of exams
+ */
+export async function updateExamOrder(
+  examOrders: Array<{ examId: string; displayOrder: number }>
+): Promise<void> {
+  try {
+    await axiosInstance.post("/entrance-exam/reorder", { examOrders });
+  } catch (error) {
+    console.error("Error updating exam order:", error);
     throw error;
   }
 }

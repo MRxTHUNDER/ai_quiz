@@ -4,15 +4,43 @@ import { Subject } from "../models/subject.model";
 
 export const GetAllEntranceExams = async (req: Request, res: Response) => {
   try {
-    const exams = await EntranceExam.find()
+    const includeDisabled =
+      typeof req.query.includeDisabled === "string"
+        ? req.query.includeDisabled === "true"
+        : false;
+
+    // For public/user-facing calls, only return enabled exams
+    const query = includeDisabled ? {} : { isEnabled: true };
+
+    const exams = await EntranceExam.find(query)
       .populate({
         path: "subjects.subject",
-        select: "subjectName testDuration",
+        select: "subjectName testDuration isEnabled",
       })
-      .sort({ createdAt: -1 });
+      .sort({ displayOrder: 1, createdAt: -1 });
+
+    // When not including disabled, also filter out disabled subjects
+    const filteredExams = includeDisabled
+      ? exams
+      : exams.map((exam) => {
+          const subjects =
+            (exam.subjects || []).filter((sub: any) => {
+              const subjectDoc: any = sub.subject;
+              const subjectEnabled =
+                subjectDoc && subjectDoc.isEnabled !== false;
+              const entryEnabled = sub.isEnabled !== false;
+              return subjectEnabled && entryEnabled;
+            }) ?? [];
+
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const examAny: any = exam;
+          examAny.subjects = subjects;
+          return examAny;
+        });
+
     res.status(200).json({
       message: "Entrance exams retrieved successfully",
-      exams,
+      exams: filteredExams,
     });
   } catch (error) {
     console.error("Error fetching entrance exams:", error);
@@ -26,9 +54,16 @@ export const GetAllEntranceExams = async (req: Request, res: Response) => {
 export const GetEntranceExamById = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const exam = await EntranceExam.findById(id).populate({
+    const includeDisabled =
+      typeof req.query.includeDisabled === "string"
+        ? req.query.includeDisabled === "true"
+        : false;
+
+    const query = includeDisabled ? { _id: id } : { _id: id, isEnabled: true };
+
+    const exam = await EntranceExam.findOne(query).populate({
       path: "subjects.subject",
-      select: "subjectName testDuration",
+      select: "subjectName testDuration isEnabled",
     });
 
     if (!exam) {
@@ -38,9 +73,22 @@ export const GetEntranceExamById = async (req: Request, res: Response) => {
       return;
     }
 
+    // When not including disabled, filter out disabled subjects
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const examAny: any = exam;
+    if (!includeDisabled && Array.isArray(examAny.subjects)) {
+      examAny.subjects = examAny.subjects.filter((sub: any) => {
+        const subjectDoc: any = sub.subject;
+        const subjectEnabled =
+          subjectDoc && subjectDoc.isEnabled !== false;
+        const entryEnabled = sub.isEnabled !== false;
+        return subjectEnabled && entryEnabled;
+      });
+    }
+
     res.status(200).json({
       message: "Entrance exam retrieved successfully",
-      exam,
+      exam: examAny,
     });
   } catch (error) {
     console.error("Error fetching entrance exam:", error);
@@ -53,7 +101,14 @@ export const GetEntranceExamById = async (req: Request, res: Response) => {
 
 export const createEntranceExam = async (req: Request, res: Response) => {
   try {
-    const { entranceExamName, entranceExamId, durationMinutes, subjects, notes } = req.body;
+    const {
+      entranceExamName,
+      entranceExamId,
+      durationMinutes,
+      subjects,
+      notes,
+      isEnabled,
+    } = req.body;
 
     if (!entranceExamName || !entranceExamId || !durationMinutes) {
       res.status(400).json({
@@ -74,7 +129,7 @@ export const createEntranceExam = async (req: Request, res: Response) => {
     }
 
     // Validate and process subjects
-    const processedSubjects = [];
+    const processedSubjects: any[] = [];
     if (subjects && Array.isArray(subjects)) {
       for (const sub of subjects) {
         if (!sub.subjectName || !sub.durationMinutes) {
@@ -105,9 +160,19 @@ export const createEntranceExam = async (req: Request, res: Response) => {
           subject: subject._id,
           durationMinutes: sub.durationMinutes,
           totalQuestions: sub.totalQuestions || 50, // Default to 50 if not provided
+          isEnabled:
+            typeof sub.isEnabled === "boolean" ? sub.isEnabled : true,
         });
       }
     }
+
+    // Get the highest displayOrder to set new exam at the end
+    const maxOrderExam = await EntranceExam.findOne({})
+      .sort({ displayOrder: -1 })
+      .select("displayOrder");
+    const nextDisplayOrder = maxOrderExam?.displayOrder
+      ? maxOrderExam.displayOrder + 1
+      : 0;
 
     const exam = await EntranceExam.create({
       entranceExamName,
@@ -115,11 +180,13 @@ export const createEntranceExam = async (req: Request, res: Response) => {
       durationMinutes,
       subjects: processedSubjects,
       notes: notes || "",
+      isEnabled: typeof isEnabled === "boolean" ? isEnabled : true,
+      displayOrder: nextDisplayOrder,
     });
 
     const populatedExam = await EntranceExam.findById(exam._id).populate({
       path: "subjects.subject",
-      select: "subjectName testDuration",
+      select: "subjectName testDuration isEnabled",
     });
 
     res.status(201).json({
@@ -146,7 +213,14 @@ export const createEntranceExam = async (req: Request, res: Response) => {
 export const updateEntranceExam = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { entranceExamName, entranceExamId, durationMinutes, subjects, notes } = req.body;
+    const {
+      entranceExamName,
+      entranceExamId,
+      durationMinutes,
+      subjects,
+      notes,
+      isEnabled,
+    } = req.body;
 
     const exam = await EntranceExam.findById(id);
     if (!exam) {
@@ -183,10 +257,11 @@ export const updateEntranceExam = async (req: Request, res: Response) => {
     if (entranceExamId) exam.entranceExamId = entranceExamId;
     if (durationMinutes) exam.durationMinutes = durationMinutes;
     if (notes !== undefined) exam.notes = notes;
+    if (typeof isEnabled === "boolean") exam.isEnabled = isEnabled;
 
     // Update subjects if provided
     if (subjects && Array.isArray(subjects)) {
-      const processedSubjects = [];
+      const processedSubjects: any[] = [];
       for (const sub of subjects) {
         if (!sub.subjectName || !sub.durationMinutes) {
           res.status(400).json({
@@ -216,6 +291,8 @@ export const updateEntranceExam = async (req: Request, res: Response) => {
           subject: subject._id,
           durationMinutes: sub.durationMinutes,
           totalQuestions: sub.totalQuestions || 50, // Default to 50 if not provided
+          isEnabled:
+            typeof sub.isEnabled === "boolean" ? sub.isEnabled : true,
         });
       }
       // Clear existing subjects and set new ones
@@ -229,7 +306,7 @@ export const updateEntranceExam = async (req: Request, res: Response) => {
 
     const populatedExam = await EntranceExam.findById(exam._id).populate({
       path: "subjects.subject",
-      select: "subjectName testDuration",
+      select: "subjectName testDuration isEnabled",
     });
 
     res.status(200).json({
@@ -274,6 +351,50 @@ export const deleteEntranceExam = async (req: Request, res: Response) => {
     res.status(500).json({
       message: "Something went wrong while deleting entrance exam",
       error,
+    });
+    return;
+  }
+};
+
+/**
+ * Update the display order of multiple exams
+ * POST /entrance-exam/reorder
+ * Body: { examOrders: [{ examId: string, displayOrder: number }] }
+ */
+export const updateExamOrder = async (req: Request, res: Response) => {
+  try {
+    const { examOrders } = req.body;
+
+    if (!Array.isArray(examOrders)) {
+      res.status(400).json({
+        message: "examOrders must be an array",
+      });
+      return;
+    }
+
+    // Update each exam's displayOrder
+    const updatePromises = examOrders.map(
+      async (item: { examId: string; displayOrder: number }) => {
+        if (!item.examId || typeof item.displayOrder !== "number") {
+          throw new Error("Invalid examOrder item");
+        }
+        return EntranceExam.findByIdAndUpdate(item.examId, {
+          displayOrder: item.displayOrder,
+        });
+      }
+    );
+
+    await Promise.all(updatePromises);
+
+    res.status(200).json({
+      message: "Exam order updated successfully",
+    });
+    return;
+  } catch (error: any) {
+    console.error("Error updating exam order:", error);
+    res.status(500).json({
+      message: "Something went wrong while updating exam order",
+      error: error.message,
     });
     return;
   }

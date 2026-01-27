@@ -5,6 +5,7 @@ import {
   GetEntranceExamById,
   updateEntranceExam,
   deleteEntranceExam,
+  updateExamOrder,
 } from "../controller/entranceExam.controller";
 import { adminAuthMiddleware } from "../middleware/middleware";
 
@@ -17,4 +18,5 @@ EntranceExamRouter.get("/:id", GetEntranceExamById);
 // Admin only routes
 EntranceExamRouter.post("/create", adminAuthMiddleware, createEntranceExam);
 EntranceExamRouter.put("/:id", adminAuthMiddleware, updateEntranceExam);
+EntranceExamRouter.post("/reorder", adminAuthMiddleware, updateExamOrder);
 EntranceExamRouter.delete("/:id", adminAuthMiddleware, deleteEntranceExam);

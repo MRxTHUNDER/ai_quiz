@@ -11,9 +11,11 @@
   },
   "dependencies": {
     "axios": "^1.13.1",
+    "katex": "^0.16.27",
     "lucide-react": "^0.344.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-katex": "^3.1.0",
     "react-router-dom": "^7.8.2",
     "zustand": "^5.0.8"
   },
@@ -21,6 +23,7 @@
     "@eslint/js": "^9.9.1",
     "@types/react": "^18.3.5",
     "@types/react-dom": "^18.3.0",
+    "@types/react-katex": "^3.0.4",
     "@vitejs/plugin-react": "^4.3.1",
     "autoprefixer": "^10.4.18",
     "baseline-browser-mapping": "^2.9.11",

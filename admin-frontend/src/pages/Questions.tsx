@@ -52,6 +52,7 @@ export default function Questions() {
   const [pagination, setPagination] = useState<Pagination | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [activeTab, setActiveTab] = useState("generate");
+  const [selectedQuestionIds, setSelectedQuestionIds] = useState<Set<string>>(new Set());
 
   // Filter state for "My Questions" tab
   const [filterEntranceExamId, setFilterEntranceExamId] = useState<string>("");
@@ -506,6 +507,10 @@ export default function Questions() {
                   loading={loadingQuestions}
                   onQuestionUpdated={() => fetchQuestions(currentPage)}
                   onQuestionDeleted={() => fetchQuestions(currentPage)}
+                  currentPage={currentPage}
+                  limit={pagination?.limit || 10}
+                  selectedQuestionIds={selectedQuestionIds}
+                  onSelectionChange={setSelectedQuestionIds}
                 />
               </div>
 
