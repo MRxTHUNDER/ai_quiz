@@ -60,6 +60,21 @@ const entranceExam = new Schema(
       type: String,
     },
 
+    bannerImageUrl: {
+      type: String,
+      default: "",
+    },
+
+    description: {
+      type: String,
+      default: "",
+    },
+
+    bannerSubjects: {
+      type: [String],
+      default: [],
+    },
+
     markingScheme: {
       correctMarks: {
         type: Number,
@@ -74,8 +89,14 @@ const entranceExam = new Schema(
         default: 0,
       },
     },
+
+    // Maximum number of times a user can attempt this exam per week
+    weeklyLimit: {
+      type: Number,
+      default: 7,
+    },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 // entranceExamName and entranceExamId already have indexes from unique: true

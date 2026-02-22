@@ -36,6 +36,44 @@ export const UploadSubjectPDF = async (req: Request, res: Response) => {
   }
 };
 
+export const UploadBannerImage = async (req: Request, res: Response) => {
+  try {
+    const { contentType, fileName } = req.body;
+
+    if (!contentType || !fileName) {
+      res.status(400).json({
+        message: "contentType and fileName required",
+      });
+      return;
+    }
+
+    const { key, url } = await getPresignUploadUrl(
+      fileName,
+      contentType,
+      "images/banners",
+    );
+
+    const r2WorkerUrl = process.env.R2_WORKER_URL || "";
+    const finalFileUrl = r2WorkerUrl
+      ? `${r2WorkerUrl}${r2WorkerUrl.endsWith("/") ? "" : "/"}${key}`
+      : key;
+
+    res.status(200).json({
+      status: "Success",
+      message: "Use this url to upload your banner image",
+      url,
+      key,
+      fileUrl: finalFileUrl,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      message: "Error generating upload url",
+      error,
+    });
+  }
+};
+
 export const TagPDF = async (req: Request, res: Response) => {
   try {
     const { fileName, key, subjectId, entranceExamId, numQuestions } = req.body;
@@ -104,7 +142,7 @@ export const TagPDF = async (req: Request, res: Response) => {
     // Ensure subject is added to entrance exam's subjects array if not already present
     // Check if subject already exists in the exam's subjects array
     const subjectExists = entranceExam.subjects.some(
-      (sub: any) => sub.subject.toString() === subject._id.toString()
+      (sub: any) => sub.subject.toString() === subject._id.toString(),
     );
 
     if (!subjectExists) {
@@ -147,7 +185,7 @@ export const TagPDF = async (req: Request, res: Response) => {
         pdf._id.toString(),
         finalFileUrl,
         subject._id.toString(),
-        entranceExam._id.toString()
+        entranceExam._id.toString(),
       );
       console.log("Summary processed successfully");
     } catch (summaryError: any) {
@@ -157,7 +195,10 @@ export const TagPDF = async (req: Request, res: Response) => {
       console.error("Error message:", summaryError?.message);
       console.error("Error stack:", summaryError?.stack);
       if (summaryError?.response) {
-        console.error("Error response:", JSON.stringify(summaryError.response, null, 2));
+        console.error(
+          "Error response:",
+          JSON.stringify(summaryError.response, null, 2),
+        );
       }
       console.error("======================================");
       // Don't fail the request if summary generation fails
@@ -168,7 +209,7 @@ export const TagPDF = async (req: Request, res: Response) => {
     if (finalNumQuestions && finalNumQuestions > 0) {
       try {
         console.log(
-          `Generating ${finalNumQuestions} questions for subject ${subject.subjectName}`
+          `Generating ${finalNumQuestions} questions for subject ${subject.subjectName}`,
         );
 
         let questions = null;
@@ -181,12 +222,12 @@ export const TagPDF = async (req: Request, res: Response) => {
               summary.summaryText,
               finalNumQuestions,
               subject._id.toString(),
-              true
+              true,
             );
             console.log(
               `Successfully generated ${
                 questions?.length || 0
-              } questions from summary`
+              } questions from summary`,
             );
           } catch (summaryGenError) {
             console.error("Summary-based generation failed:", summaryGenError);
@@ -197,17 +238,17 @@ export const TagPDF = async (req: Request, res: Response) => {
         // Fallback: Generate questions based on subject knowledge (no PDF/summary needed)
         if (!questions || questions.length === 0) {
           console.log(
-            `Generating questions from subject knowledge: ${subject.subjectName} (${entranceExam.entranceExamName})...`
+            `Generating questions from subject knowledge: ${subject.subjectName} (${entranceExam.entranceExamName})...`,
           );
           questions = await GenerateQuestionsFromSubjectKnowledge(
             subject.subjectName,
             entranceExam.entranceExamName,
-            finalNumQuestions
+            finalNumQuestions,
           );
           console.log(
             `Generated ${
               questions?.length || 0
-            } questions from subject knowledge`
+            } questions from subject knowledge`,
           );
         }
 
@@ -218,15 +259,15 @@ export const TagPDF = async (req: Request, res: Response) => {
             Options: q.Options,
             correctOption: q.correctOption,
             SubjectId: subject._id,
+            entranceExam: entranceExam._id,
             createdBy: userId || undefined,
           }));
 
           // Save questions to database
-          generatedQuestions = await QuestionModel.insertMany(
-            formattedQuestions
-          );
+          generatedQuestions =
+            await QuestionModel.insertMany(formattedQuestions);
           console.log(
-            `Successfully generated and saved ${generatedQuestions.length} questions`
+            `Successfully generated and saved ${generatedQuestions.length} questions`,
           );
         } else {
           console.warn("No questions generated from AI service");
@@ -333,7 +374,7 @@ export const GenerateQuestionsDirect = async (req: Request, res: Response) => {
     console.log(
       `Generating ${finalNumQuestions} questions for ${subject.subjectName} (${
         entranceExam.entranceExamName
-      })${topic ? ` - Topic: ${topic}` : ""}`
+      })${topic ? ` - Topic: ${topic}` : ""}`,
     );
 
     // Generate questions using subject knowledge
@@ -341,7 +382,7 @@ export const GenerateQuestionsDirect = async (req: Request, res: Response) => {
       subject.subjectName,
       entranceExam.entranceExamName,
       finalNumQuestions,
-      topic || undefined
+      topic || undefined,
     );
 
     let generatedQuestions = null;
@@ -353,13 +394,14 @@ export const GenerateQuestionsDirect = async (req: Request, res: Response) => {
         Options: q.Options,
         correctOption: q.correctOption,
         SubjectId: subject._id,
+        entranceExam: entranceExam._id,
         createdBy: userId || undefined,
       }));
 
       // Save questions to database
       generatedQuestions = await QuestionModel.insertMany(formattedQuestions);
       console.log(
-        `Successfully generated and saved ${generatedQuestions.length} questions`
+        `Successfully generated and saved ${generatedQuestions.length} questions`,
       );
     } else {
       console.warn("No questions generated from AI service");

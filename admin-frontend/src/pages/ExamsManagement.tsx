@@ -19,7 +19,14 @@ import {
   type CreateExamData,
 } from "@/lib/entranceExams";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
+
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -190,14 +197,16 @@ export default function ExamsManagement() {
   const [editingExam, setEditingExam] = useState<EntranceExam | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isReordering, setIsReordering] = useState(false);
+  const [updatingLimits, setUpdatingLimits] = useState<Record<string, boolean>>(
+    {},
+  );
 
   // Drag and drop sensors
   const sensors = useSensors(
     useSensor(PointerSensor),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
-    })
+    }),
   );
 
   // Form state
@@ -207,6 +216,7 @@ export default function ExamsManagement() {
     durationMinutes: "",
     notes: "",
     isEnabled: "true",
+    weeklyLimit: "7",
   });
   const [subjects, setSubjects] = useState<SubjectInput[]>([
     { subjectName: "", durationMinutes: 0, isEnabled: true },
@@ -237,6 +247,7 @@ export default function ExamsManagement() {
       durationMinutes: "",
       notes: "",
       isEnabled: "true",
+      weeklyLimit: "7",
     });
     setSubjects([{ subjectName: "", durationMinutes: 0, isEnabled: true }]);
     setError(null);
@@ -251,13 +262,14 @@ export default function ExamsManagement() {
       durationMinutes: exam.durationMinutes.toString(),
       notes: exam.notes || "",
       isEnabled: exam.isEnabled === false ? "false" : "true",
+      weeklyLimit: exam.weeklyLimit?.toString() || "7",
     });
     setSubjects(
       exam.subjects.map((sub) => ({
         subjectName: sub.subject.subjectName,
         durationMinutes: sub.durationMinutes,
         isEnabled: sub.isEnabled !== false,
-      }))
+      })),
     );
     setError(null);
     setIsDialogOpen(true);
@@ -277,7 +289,7 @@ export default function ExamsManagement() {
   const handleSubjectChange = (
     index: number,
     field: keyof SubjectInput,
-    value: string | number | boolean
+    value: string | number | boolean,
   ) => {
     const updated = [...subjects];
     updated[index] = { ...updated[index], [field]: value };
@@ -319,6 +331,7 @@ export default function ExamsManagement() {
         })),
         notes: formData.notes || undefined,
         isEnabled: formData.isEnabled === "true",
+        weeklyLimit: parseInt(formData.weeklyLimit) || 7,
       };
 
       if (editingExam) {
@@ -343,7 +356,7 @@ export default function ExamsManagement() {
   const handleDelete = async (id: string, name: string) => {
     if (
       !confirm(
-        `Are you sure you want to delete "${name}"? This action cannot be undone.`
+        `Are you sure you want to delete "${name}"? This action cannot be undone.`,
       )
     ) {
       return;
@@ -402,7 +415,6 @@ export default function ExamsManagement() {
 
     // Update displayOrder in backend
     try {
-      setIsReordering(true);
       const examOrders = newExams.map((exam, index) => ({
         examId: exam._id,
         displayOrder: index,
@@ -414,8 +426,6 @@ export default function ExamsManagement() {
       // Revert on error
       await fetchExams();
       alert("Failed to update exam order. Please try again.");
-    } finally {
-      setIsReordering(false);
     }
   };
 
@@ -427,6 +437,25 @@ export default function ExamsManagement() {
       await fetchExams();
     } catch (err) {
       console.error("Failed to toggle exam status:", err);
+    }
+  };
+
+  const handleUpdateExamLimit = async (examId: string, newLimit: string) => {
+    const limit = parseInt(newLimit);
+    if (isNaN(limit) || limit < 1) {
+      alert("Please enter a valid number greater than 0");
+      return;
+    }
+
+    try {
+      setUpdatingLimits((prev) => ({ ...prev, [examId]: true }));
+      await updateEntranceExam(examId, { weeklyLimit: limit });
+      await fetchExams();
+    } catch (err) {
+      console.error("Failed to update exam limit:", err);
+      alert("Failed to update exam weekly limit.");
+    } finally {
+      setUpdatingLimits((prev) => ({ ...prev, [examId]: false }));
     }
   };
 
@@ -494,6 +523,68 @@ export default function ExamsManagement() {
         </DndContext>
       )}
 
+      {/* Weekly Limits Configuration Section */}
+      {exams.length > 0 && (
+        <Card className="mt-8 border-t-4 border-t-primary/20">
+          <CardHeader>
+            <CardTitle>Weekly Limits Configuration</CardTitle>
+            <CardDescription>
+              Directly modify the maximum number of times users can attempt each
+              exam and subject per week.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="space-y-4">
+              {exams.map((exam) => (
+                <div
+                  key={exam._id}
+                  className="border rounded-lg bg-card overflow-hidden"
+                >
+                  <div className="bg-muted/30 px-4 py-3 border-b flex flex-wrap items-center justify-between gap-4">
+                    <div className="flex items-center gap-2">
+                      <BookOpen className="h-5 w-5 text-primary" />
+                      <h3 className="font-semibold text-lg">
+                        {exam.entranceExamName}
+                      </h3>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <Label
+                        htmlFor={`limit-exam-${exam._id}`}
+                        className="font-medium whitespace-nowrap"
+                      >
+                        Exam Weekly Limit:
+                      </Label>
+                      <div className="flex items-center gap-2">
+                        <Input
+                          id={`limit-exam-${exam._id}`}
+                          type="number"
+                          className="w-24 h-9"
+                          min="1"
+                          defaultValue={exam.weeklyLimit || 7}
+                          onBlur={(e) => {
+                            if (
+                              e.target.value !== String(exam.weeklyLimit || 7)
+                            ) {
+                              handleUpdateExamLimit(exam._id, e.target.value);
+                            }
+                          }}
+                          disabled={updatingLimits[exam._id]}
+                        />
+                        {updatingLimits[exam._id] && (
+                          <span className="text-xs text-muted-foreground animate-pulse">
+                            Saving...
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogClose onClick={() => setIsDialogOpen(false)} />
@@ -545,7 +636,7 @@ export default function ExamsManagement() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="durationMinutes">
                   Total Duration (minutes){" "}
@@ -557,9 +648,31 @@ export default function ExamsManagement() {
                   min="1"
                   value={formData.durationMinutes}
                   onChange={(e) =>
-                    setFormData({ ...formData, durationMinutes: e.target.value })
+                    setFormData({
+                      ...formData,
+                      durationMinutes: e.target.value,
+                    })
                   }
                   placeholder="e.g., 180"
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="weeklyLimit">
+                  Weekly Limit <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  id="weeklyLimit"
+                  type="number"
+                  min="1"
+                  value={formData.weeklyLimit}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      weeklyLimit: e.target.value,
+                    })
+                  }
+                  placeholder="e.g., 7"
                   required
                 />
               </div>
@@ -572,7 +685,8 @@ export default function ExamsManagement() {
                   onClick={() =>
                     setFormData({
                       ...formData,
-                      isEnabled: formData.isEnabled === "true" ? "false" : "true",
+                      isEnabled:
+                        formData.isEnabled === "true" ? "false" : "true",
                     })
                   }
                   className={
@@ -604,7 +718,7 @@ export default function ExamsManagement() {
                           handleSubjectChange(
                             index,
                             "subjectName",
-                            e.target.value
+                            e.target.value,
                           )
                         }
                         placeholder="e.g., Mathematics"
@@ -624,7 +738,7 @@ export default function ExamsManagement() {
                           handleSubjectChange(
                             index,
                             "durationMinutes",
-                            parseInt(e.target.value) || 0
+                            parseInt(e.target.value) || 0,
                           )
                         }
                         required
@@ -634,7 +748,11 @@ export default function ExamsManagement() {
                       type="button"
                       size="sm"
                       onClick={() =>
-                        handleSubjectChange(index, "isEnabled", !subject.isEnabled)
+                        handleSubjectChange(
+                          index,
+                          "isEnabled",
+                          !subject.isEnabled,
+                        )
                       }
                       className={
                         subject.isEnabled
@@ -694,8 +812,8 @@ export default function ExamsManagement() {
                 {isSubmitting
                   ? "Saving..."
                   : editingExam
-                  ? "Update Exam"
-                  : "Create Exam"}
+                    ? "Update Exam"
+                    : "Create Exam"}
               </Button>
             </div>
           </form>
@@ -784,8 +902,10 @@ export default function ExamsManagement() {
                                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
                                     (s as any).totalQuestions ?? 50,
                                   isEnabled:
-                                    i === idx ? sub.isEnabled === false : s.isEnabled !== false,
-                                })
+                                    i === idx
+                                      ? sub.isEnabled === false
+                                      : s.isEnabled !== false,
+                                }),
                               );
 
                               await updateEntranceExam(viewingExam._id, {
@@ -800,7 +920,7 @@ export default function ExamsManagement() {
                             } catch (err) {
                               console.error(
                                 "Failed to toggle subject status:",
-                                err
+                                err,
                               );
                             }
                           }}

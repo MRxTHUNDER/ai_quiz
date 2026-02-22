@@ -62,7 +62,7 @@ function Home() {
 
         // Find CUET exam and set it as default
         const cuetIndex = exams.findIndex((exam) =>
-          exam.entranceExamName.toUpperCase().includes("CUET")
+          exam.entranceExamName.toUpperCase().includes("CUET"),
         );
         if (cuetIndex !== -1) {
           setCurrentSlide(cuetIndex);
@@ -97,10 +97,10 @@ function Home() {
   const prevSlide = () => {
     if (entranceExams.length > 0) {
       setCurrentSlide(
-        (prev) => (prev - 1 + entranceExams.length) % entranceExams.length
+        (prev) => (prev - 1 + entranceExams.length) % entranceExams.length,
       );
       setSelectedExamIndex(
-        (prev) => (prev - 1 + entranceExams.length) % entranceExams.length
+        (prev) => (prev - 1 + entranceExams.length) % entranceExams.length,
       );
     }
   };
@@ -127,11 +127,21 @@ function Home() {
     return {
       id: exam._id,
       title: `${exam.entranceExamName} Exam Preparation`,
-      description: `Prepare for ${exam.entranceExamName} with AI-powered quizzes customized across diverse subjects. Our AI ensures you're ready for entrance tests with adaptive and comprehensive practice.`,
+      description:
+        exam.description && exam.description.trim() !== ""
+          ? exam.description
+          : `Prepare for ${exam.entranceExamName} with AI-powered quizzes customized across diverse subjects. Our AI ensures you're ready for entrance tests with adaptive and comprehensive practice.`,
       image:
-        "https://images.pexels.com/photos/3184644/pexels-photo-3184644.jpeg?auto=compress&cs=tinysrgb&w=1200",
+        exam.bannerImageUrl && exam.bannerImageUrl.trim() !== ""
+          ? exam.bannerImageUrl
+          : "https://images.pexels.com/photos/3184644/pexels-photo-3184644.jpeg?auto=compress&cs=tinysrgb&w=1200",
       icon: icons[index % icons.length],
-      tags: subjects.length > 0 ? subjects.slice(0, 3) : ["General"],
+      tags:
+        exam.bannerSubjects && exam.bannerSubjects.length > 0
+          ? exam.bannerSubjects
+          : subjects.length > 0
+            ? subjects.slice(0, 3)
+            : ["General"],
       color: colorGradients[index % colorGradients.length],
       examId: exam._id,
       examName: exam.entranceExamName,
@@ -160,9 +170,7 @@ function Home() {
                 {featuredExamNames.length > 0
                   ? featuredExamNames.length === 1
                     ? `${featuredExamNames[0]} aspirant`
-                    : `${featuredExamNames
-                        .slice(0, -1)
-                        .join(", ")}, or ${
+                    : `${featuredExamNames.slice(0, -1).join(", ")}, or ${
                         featuredExamNames[featuredExamNames.length - 1]
                       } aspirant`
                   : "JEE, NEET, CET, or CUET aspirant"}
@@ -212,8 +220,8 @@ function Home() {
                         index === currentSlide
                           ? "opacity-100 translate-x-0"
                           : index < currentSlide
-                          ? "opacity-0 -translate-x-full"
-                          : "opacity-0 translate-x-full"
+                            ? "opacity-0 -translate-x-full"
+                            : "opacity-0 translate-x-full"
                       }`}
                       onClick={() => handleExamClick(exam.examId)}
                     >
@@ -344,8 +352,8 @@ function Home() {
                 learning.
               </p>
               <div className="flex flex-col sm:flex-row gap-4">
-                <Button 
-                  size="lg" 
+                <Button
+                  size="lg"
                   className="shadow-xl"
                   onClick={() => navigate("/start-test")}
                 >

@@ -19,7 +19,7 @@ const uiFlagsSchema = new Schema(
     // uploadPdfPageEnabled: { type: Boolean, default: true },
     // dashboardEnabled: { type: Boolean, default: true },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 // Ensure only one document exists (singleton pattern)

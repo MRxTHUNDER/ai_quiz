@@ -79,8 +79,7 @@ export const GetEntranceExamById = async (req: Request, res: Response) => {
     if (!includeDisabled && Array.isArray(examAny.subjects)) {
       examAny.subjects = examAny.subjects.filter((sub: any) => {
         const subjectDoc: any = sub.subject;
-        const subjectEnabled =
-          subjectDoc && subjectDoc.isEnabled !== false;
+        const subjectEnabled = subjectDoc && subjectDoc.isEnabled !== false;
         const entryEnabled = sub.isEnabled !== false;
         return subjectEnabled && entryEnabled;
       });
@@ -108,11 +107,16 @@ export const createEntranceExam = async (req: Request, res: Response) => {
       subjects,
       notes,
       isEnabled,
+      bannerImageUrl,
+      description,
+      bannerSubjects,
+      weeklyLimit,
     } = req.body;
 
     if (!entranceExamName || !entranceExamId || !durationMinutes) {
       res.status(400).json({
-        message: "entranceExamName, entranceExamId, and durationMinutes are required",
+        message:
+          "entranceExamName, entranceExamId, and durationMinutes are required",
       });
       return;
     }
@@ -140,7 +144,10 @@ export const createEntranceExam = async (req: Request, res: Response) => {
         }
 
         // Validate totalQuestions if provided
-        if (sub.totalQuestions !== undefined && (isNaN(Number(sub.totalQuestions)) || Number(sub.totalQuestions) < 1)) {
+        if (
+          sub.totalQuestions !== undefined &&
+          (isNaN(Number(sub.totalQuestions)) || Number(sub.totalQuestions) < 1)
+        ) {
           res.status(400).json({
             message: "totalQuestions must be a positive number",
           });
@@ -160,8 +167,7 @@ export const createEntranceExam = async (req: Request, res: Response) => {
           subject: subject._id,
           durationMinutes: sub.durationMinutes,
           totalQuestions: sub.totalQuestions || 50, // Default to 50 if not provided
-          isEnabled:
-            typeof sub.isEnabled === "boolean" ? sub.isEnabled : true,
+          isEnabled: typeof sub.isEnabled === "boolean" ? sub.isEnabled : true,
         });
       }
     }
@@ -182,6 +188,12 @@ export const createEntranceExam = async (req: Request, res: Response) => {
       notes: notes || "",
       isEnabled: typeof isEnabled === "boolean" ? isEnabled : true,
       displayOrder: nextDisplayOrder,
+      bannerImageUrl: bannerImageUrl || "",
+      description:
+        description ||
+        `Prepare for ${entranceExamName} with AI-powered quizzes customized across diverse subjects. Our AI ensures you're ready for entrance tests with adaptive and comprehensive practice.`,
+      bannerSubjects: Array.isArray(bannerSubjects) ? bannerSubjects : [],
+      weeklyLimit: typeof weeklyLimit === "number" ? weeklyLimit : 7,
     });
 
     const populatedExam = await EntranceExam.findById(exam._id).populate({
@@ -220,6 +232,10 @@ export const updateEntranceExam = async (req: Request, res: Response) => {
       subjects,
       notes,
       isEnabled,
+      bannerImageUrl,
+      description,
+      bannerSubjects,
+      weeklyLimit,
     } = req.body;
 
     const exam = await EntranceExam.findById(id);
@@ -258,6 +274,11 @@ export const updateEntranceExam = async (req: Request, res: Response) => {
     if (durationMinutes) exam.durationMinutes = durationMinutes;
     if (notes !== undefined) exam.notes = notes;
     if (typeof isEnabled === "boolean") exam.isEnabled = isEnabled;
+    if (bannerImageUrl !== undefined) exam.bannerImageUrl = bannerImageUrl;
+    if (description !== undefined) exam.description = description;
+    if (bannerSubjects !== undefined)
+      exam.bannerSubjects = Array.isArray(bannerSubjects) ? bannerSubjects : [];
+    if (typeof weeklyLimit === "number") exam.weeklyLimit = weeklyLimit;
 
     // Update subjects if provided
     if (subjects && Array.isArray(subjects)) {
@@ -271,7 +292,10 @@ export const updateEntranceExam = async (req: Request, res: Response) => {
         }
 
         // Validate totalQuestions if provided
-        if (sub.totalQuestions !== undefined && (isNaN(Number(sub.totalQuestions)) || Number(sub.totalQuestions) < 1)) {
+        if (
+          sub.totalQuestions !== undefined &&
+          (isNaN(Number(sub.totalQuestions)) || Number(sub.totalQuestions) < 1)
+        ) {
           res.status(400).json({
             message: "totalQuestions must be a positive number",
           });
@@ -291,8 +315,7 @@ export const updateEntranceExam = async (req: Request, res: Response) => {
           subject: subject._id,
           durationMinutes: sub.durationMinutes,
           totalQuestions: sub.totalQuestions || 50, // Default to 50 if not provided
-          isEnabled:
-            typeof sub.isEnabled === "boolean" ? sub.isEnabled : true,
+          isEnabled: typeof sub.isEnabled === "boolean" ? sub.isEnabled : true,
         });
       }
       // Clear existing subjects and set new ones
@@ -381,7 +404,7 @@ export const updateExamOrder = async (req: Request, res: Response) => {
         return EntranceExam.findByIdAndUpdate(item.examId, {
           displayOrder: item.displayOrder,
         });
-      }
+      },
     );
 
     await Promise.all(updatePromises);

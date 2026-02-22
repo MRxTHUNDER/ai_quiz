@@ -10,7 +10,7 @@ import { UserRole } from "../types/types";
 export const getUIFlags = async (req: Request, res: Response) => {
   try {
     let flags = await UIFlags.findOne();
-    
+
     // If no flags exist, create default ones
     if (!flags) {
       flags = await UIFlags.create({});

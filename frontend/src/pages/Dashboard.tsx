@@ -9,6 +9,19 @@ import {
   Heart,
   History,
 } from "lucide-react";
+import {
+  PieChart,
+  Pie,
+  Cell,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+  LineChart,
+  Line,
+} from "recharts";
 import Button from "../components/Button";
 import StatCard from "../components/StatCard";
 import QuizCard from "../components/QuizCard";
@@ -130,7 +143,7 @@ function Dashboard() {
         // Filter to only show completed or time_up tests (finished tests)
         const finishedTests = historyRes.data.data.filter(
           (test: TestHistoryItem) =>
-            test.status === "completed" || test.status === "time_up"
+            test.status === "completed" || test.status === "time_up",
         );
         setTestHistory(finishedTests);
       }
@@ -165,7 +178,7 @@ function Dashboard() {
 
   const formatValue = (
     value: number | undefined | null,
-    isPercentage: boolean = false
+    isPercentage: boolean = false,
   ): string => {
     // If no tests completed, show "-" for all stats
     if (!hasCompletedTests) {
@@ -190,9 +203,32 @@ function Dashboard() {
     progressData?.progress.testsBySubject &&
     progressData.progress.testsBySubject.length > 0
       ? progressData.progress.testsBySubject.sort(
-          (a, b) => b.bestScore - a.bestScore
+          (a, b) => b.bestScore - a.bestScore,
         )[0]?.subject || "N/A"
       : "N/A";
+
+  const subjectData =
+    progressData?.progress.testsBySubject?.map((sub) => ({
+      name: sub.subject || "Unknown",
+      value: sub.testCount,
+    })) || [];
+  const COLORS = [
+    "#3b82f6",
+    "#10b981",
+    "#f59e0b",
+    "#ef4444",
+    "#8b5cf6",
+    "#06b6d4",
+  ];
+
+  const performanceData = [...testHistory].reverse().map((test) => {
+    const d = new Date(test.completedAt);
+    return {
+      name: `${d.getDate()} ${d.toLocaleString("default", { month: "short" })}`,
+      score: test.percentage,
+      subject: test.test.subject || "Unknown",
+    };
+  });
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">
@@ -293,6 +329,119 @@ function Dashboard() {
             </div>
           </div>
         </div>
+
+        {/* Charts Section */}
+        {hasCompletedTests && (
+          <div className="mb-12">
+            <h2 className="text-2xl font-bold text-gray-900 mb-8">
+              Performance Insights
+            </h2>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              {/* Pie Chart */}
+              <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm transition-all duration-300 hover:shadow-md">
+                <h3 className="text-lg font-bold text-gray-900 mb-4">
+                  Tests by Subject
+                </h3>
+                <div className="h-72">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={subjectData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={70}
+                        outerRadius={100}
+                        paddingAngle={5}
+                        dataKey="value"
+                      >
+                        {subjectData.map((entry, index) => (
+                          <Cell
+                            key={`cell-${index}`}
+                            fill={COLORS[index % COLORS.length]}
+                          />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        contentStyle={{
+                          borderRadius: "12px",
+                          border: "none",
+                          boxShadow: "0 10px 15px -3px rgb(0 0 0 / 0.1)",
+                        }}
+                        formatter={(value) => [value, "Tests"]}
+                      />
+                      <Legend iconType="circle" />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              {/* Line Chart */}
+              <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm transition-all duration-300 hover:shadow-md">
+                <h3 className="text-lg font-bold text-gray-900 mb-4">
+                  Recent Scores Trend
+                </h3>
+                <div className="h-72">
+                  {performanceData.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart
+                        data={performanceData}
+                        margin={{ top: 5, right: 20, bottom: 5, left: 0 }}
+                      >
+                        <CartesianGrid
+                          strokeDasharray="3 3"
+                          vertical={false}
+                          stroke="#e5e7eb"
+                        />
+                        <XAxis
+                          dataKey="name"
+                          axisLine={false}
+                          tickLine={false}
+                          tick={{ fontSize: 12, fill: "#6b7280" }}
+                          dy={10}
+                        />
+                        <YAxis
+                          axisLine={false}
+                          tickLine={false}
+                          tick={{ fontSize: 12, fill: "#6b7280" }}
+                          domain={[0, 100]}
+                          tickFormatter={(value) => `${value}%`}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            borderRadius: "12px",
+                            border: "none",
+                            boxShadow: "0 10px 15px -3px rgb(0 0 0 / 0.1)",
+                          }}
+                          formatter={(value, name, props) => [
+                            `${Number(value).toFixed(0)}%`,
+                            props.payload.subject || "Score",
+                          ]}
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="score"
+                          stroke="#3b82f6"
+                          strokeWidth={3}
+                          dot={{
+                            r: 5,
+                            fill: "#ffffff",
+                            strokeWidth: 2,
+                            stroke: "#3b82f6",
+                          }}
+                          activeDot={{ r: 8, strokeWidth: 0 }}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="flex bg-gray-50 h-full items-center justify-center text-gray-400 rounded-lg">
+                      No data available
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Recent Quizzes */}
         <div className="mb-12">

@@ -42,13 +42,13 @@ export const CreateQuestions = async (req: Request, res: Response) => {
           .join("\n\n---\n\n");
         isUsingSummary = true;
         console.log(
-          `Using ${summaries.length} existing summaries for question generation`
+          `Using ${summaries.length} existing summaries for question generation`,
         );
       }
     } catch (summaryError) {
       console.warn(
         "Could not fetch summaries, falling back to direct PDF:",
-        summaryError
+        summaryError,
       );
     }
 
@@ -62,12 +62,12 @@ export const CreateQuestions = async (req: Request, res: Response) => {
           sourceForQuestions,
           numQuestions,
           subjectId,
-          true
+          true,
         );
         console.log(
           `Successfully generated ${
             generatedQuestions?.length || 0
-          } questions from summaries`
+          } questions from summaries`,
         );
       } catch (summaryGenError) {
         console.error("Summary-based generation failed:", summaryGenError);
@@ -88,17 +88,17 @@ export const CreateQuestions = async (req: Request, res: Response) => {
 
         if (subject) {
           console.log(
-            `Generating questions from subject knowledge: ${subject.subjectName}...`
+            `Generating questions from subject knowledge: ${subject.subjectName}...`,
           );
           generatedQuestions = await GenerateQuestionsFromSubjectKnowledge(
             subject.subjectName,
             entranceExam?.entranceExamName || "General Exam",
-            numQuestions
+            numQuestions,
           );
           console.log(
             `Generated ${
               generatedQuestions?.length || 0
-            } questions from subject knowledge`
+            } questions from subject knowledge`,
           );
         } else {
           console.error("Subject not found, cannot generate questions");
@@ -186,7 +186,7 @@ export const GetQuestionsByCreator = async (req: Request, res: Response) => {
 
       if (entranceExam) {
         subjectObjectIds = (entranceExam.subjects as any[]).map(
-          (sub) => sub.subject
+          (sub) => sub.subject,
         );
         if (subjectObjectIds.length === 0) {
           // No subjects found for this exam, return empty result
@@ -236,7 +236,7 @@ export const GetQuestionsByCreator = async (req: Request, res: Response) => {
       if (entranceExamId && subjectObjectIds.length > 0) {
         const subjectObjId = new mongoose.Types.ObjectId(subjectId);
         const subjectBelongsToExam = subjectObjectIds.some(
-          (id) => id.toString() === subjectObjId.toString()
+          (id) => id.toString() === subjectObjId.toString(),
         );
         if (!subjectBelongsToExam) {
           // Subject doesn't belong to the selected entrance exam
@@ -267,9 +267,10 @@ export const GetQuestionsByCreator = async (req: Request, res: Response) => {
     // Fetch questions with filters
     const questions = await QuestionModel.find(queryFilter)
       .populate("SubjectId", "subjectName")
+      .populate("entranceExam", "entranceExamName entranceExamId")
       .populate("createdBy", "email firstname lastname role")
       .select(
-        "questionsText Options correctOption SubjectId createdBy createdAt updatedAt"
+        "questionsText Options correctOption SubjectId entranceExam createdBy createdAt updatedAt",
       )
       .skip(skip)
       .limit(limit)
@@ -280,8 +281,13 @@ export const GetQuestionsByCreator = async (req: Request, res: Response) => {
       questions.map(async (question) => {
         let entranceExamInfo = null;
 
-        if (question.SubjectId) {
-          // Find the entrance exam that contains this subject
+        if (question.entranceExam) {
+          entranceExamInfo = {
+            name: (question.entranceExam as any).entranceExamName,
+            id: (question.entranceExam as any).entranceExamId,
+          };
+        } else if (question.SubjectId) {
+          // Fallback for older questions generated before the mapping fix
           const entranceExam = await EntranceExam.findOne({
             "subjects.subject": (question.SubjectId as any)._id,
           }).select("entranceExamName entranceExamId");
@@ -314,7 +320,7 @@ export const GetQuestionsByCreator = async (req: Request, res: Response) => {
           createdAt: question.createdAt,
           updatedAt: question.updatedAt,
         };
-      })
+      }),
     );
 
     const totalPages = Math.ceil(totalCount / limit);
@@ -368,7 +374,7 @@ export const GetSubjectQuestions = async (req: Request, res: Response) => {
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
     const limit = Math.min(
       100,
-      Math.max(1, parseInt(req.query.limit as string) || 10)
+      Math.max(1, parseInt(req.query.limit as string) || 10),
     );
     const skip = (page - 1) * limit;
 
@@ -525,9 +531,10 @@ export const UpdateQuestion = async (req: Request, res: Response) => {
     const updatedQuestion = await QuestionModel.findByIdAndUpdate(
       questionId,
       updateData,
-      { new: true, runValidators: true }
+      { new: true, runValidators: true },
     )
       .populate("SubjectId", "subjectName")
+      .populate("entranceExam", "entranceExamName entranceExamId")
       .populate("createdBy", "email firstname lastname role");
 
     if (!updatedQuestion) {
@@ -540,7 +547,14 @@ export const UpdateQuestion = async (req: Request, res: Response) => {
 
     // Get entrance exam info
     let entranceExamInfo = null;
-    if (updatedQuestion.SubjectId) {
+
+    if (updatedQuestion.entranceExam) {
+      entranceExamInfo = {
+        name: (updatedQuestion.entranceExam as any).entranceExamName,
+        id: (updatedQuestion.entranceExam as any).entranceExamId,
+      };
+    } else if (updatedQuestion.SubjectId) {
+      // Fallback for older questions generated before the mapping fix
       const entranceExam = await EntranceExam.findOne({
         "subjects.subject": (updatedQuestion.SubjectId as any)._id,
       }).select("entranceExamName entranceExamId");
@@ -659,7 +673,11 @@ export const DeleteQuestionsBulk = async (req: Request, res: Response) => {
     const currentUserId = req.userId;
     const currentUserRole = req.user?.role;
 
-    if (!questionIds || !Array.isArray(questionIds) || questionIds.length === 0) {
+    if (
+      !questionIds ||
+      !Array.isArray(questionIds) ||
+      questionIds.length === 0
+    ) {
       res.status(400).json({
         success: false,
         message: "Question IDs array is required",
@@ -668,7 +686,9 @@ export const DeleteQuestionsBulk = async (req: Request, res: Response) => {
     }
 
     // Validate all IDs are valid MongoDB ObjectIds
-    const validIds = questionIds.filter((id) => mongoose.Types.ObjectId.isValid(id));
+    const validIds = questionIds.filter((id) =>
+      mongoose.Types.ObjectId.isValid(id),
+    );
     if (validIds.length === 0) {
       res.status(400).json({
         success: false,

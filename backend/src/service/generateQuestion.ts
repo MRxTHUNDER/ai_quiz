@@ -6,6 +6,8 @@ dotenv.config();
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
+import stringSimilarity from "string-similarity";
+
 const BATCH_SIZE = process.env.QUESTION_BATCH_SIZE
   ? Number(process.env.QUESTION_BATCH_SIZE)
   : 10;
@@ -14,22 +16,10 @@ const MAX_RETRIES = 3;
 
 const BATCH_DELAY = 2000; // 2 seconds
 
+// Set string-similarity threshold
 const SIMILARITY_THRESHOLD = Number(
-  process.env.DUPLICATE_SIMILARITY_THRESHOLD || 0.85
+  process.env.DUPLICATE_SIMILARITY_THRESHOLD || 0.85,
 );
-
-const generateEmbedding = async (text: string): Promise<number[]> => {
-  try {
-    const response = await client.embeddings.create({
-      model: "text-embedding-3-small",
-      input: text,
-    });
-    return response.data[0].embedding;
-  } catch (error) {
-    console.error("Error generating embedding:", error);
-    return [];
-  }
-};
 
 /**
  * Calculate cosine similarity between two vectors
@@ -60,7 +50,7 @@ const cosineSimilarity = (vec1: number[], vec2: number[]): number => {
  */
 const extractTopics = (question: any): string[] => {
   const text = `${question.questionsText} ${question.Options.join(
-    " "
+    " ",
   )}`.toLowerCase();
   const topics: string[] = [];
 
@@ -112,60 +102,56 @@ const extractTopics = (question: any): string[] => {
 };
 
 /**
- * Filter duplicate questions using embedding similarity
+ * Filter duplicate questions using local string similarity
  */
 const filterDuplicates = async (
   candidates: any[],
   subjectId: string,
-  threshold: number = SIMILARITY_THRESHOLD
+  threshold: number = SIMILARITY_THRESHOLD,
 ): Promise<any[]> => {
   try {
-    // Get existing questions for this subject with embeddings
+    // Get existing questions for this subject
     const existingQuestions = await QuestionModel.find({
       SubjectId: subjectId,
-      embedding: { $exists: true, $ne: null },
-    }).select("embedding");
+    }).select("questionsText");
 
     if (existingQuestions.length === 0) {
-      // No existing questions, all candidates are unique
-      console.log(
-        "No existing questions with embeddings, accepting all candidates"
-      );
+      console.log("No existing questions found, accepting all candidates");
       return candidates;
     }
 
-    const existingEmbeddings = existingQuestions
-      .map((q: any) => q.embedding)
-      .filter((emb: any) => emb && emb.length > 0);
+    const existingTexts = existingQuestions
+      .map((q: any) => q.questionsText)
+      .filter(Boolean)
+      .map((t: string) => t.toLowerCase());
 
-    if (existingEmbeddings.length === 0) {
+    if (existingTexts.length === 0) {
       return candidates;
     }
 
-    // Filter candidates based on similarity
+    // Filter candidates locally
     const uniqueCandidates: any[] = [];
 
     for (const candidate of candidates) {
-      if (!candidate.embedding || candidate.embedding.length === 0) {
-        // If embedding generation failed, skip this candidate
-        console.warn("Candidate has no embedding, skipping");
+      if (!candidate.questionsText) {
+        uniqueCandidates.push(candidate);
         continue;
       }
 
-      // Check similarity with all existing questions
-      let isDuplicate = false;
-      for (const existingEmb of existingEmbeddings) {
-        const similarity = cosineSimilarity(candidate.embedding, existingEmb);
-        if (similarity >= threshold) {
-          isDuplicate = true;
-          console.log(
-            `Duplicate detected with similarity ${similarity.toFixed(3)}`
-          );
-          break;
-        }
-      }
+      const candidateText = candidate.questionsText.toLowerCase();
 
-      if (!isDuplicate) {
+      const match = stringSimilarity.findBestMatch(
+        candidateText,
+        existingTexts,
+      );
+
+      if (match.bestMatch.rating >= threshold) {
+        console.log(
+          `\n🚫 BLOCKED DUPLICATE QUESTION (Similarity: ${(match.bestMatch.rating * 100).toFixed(1)}%)`,
+        );
+        console.log(`   - New: "${candidate.questionsText}"`);
+        console.log(`   - Exists: "${existingTexts[match.bestMatchIndex]}"\n`);
+      } else {
         uniqueCandidates.push(candidate);
       }
     }
@@ -173,7 +159,7 @@ const filterDuplicates = async (
     console.log(
       `Filtered ${
         candidates.length - uniqueCandidates.length
-      } duplicate questions`
+      } duplicate questions`,
     );
     return uniqueCandidates;
   } catch (error) {
@@ -208,7 +194,7 @@ const getTopicGuidance = async (subjectId: string): Promise<string> => {
     let guidance = "\n\nTOPIC GUIDANCE (to ensure variety):\n";
     if (overusedTopics.length > 0) {
       guidance += `- Try to AVOID these overused topics: ${overusedTopics.join(
-        ", "
+        ", ",
       )}\n`;
     }
     if (
@@ -216,7 +202,7 @@ const getTopicGuidance = async (subjectId: string): Promise<string> => {
       underusedTopics.length < topicStats.length
     ) {
       guidance += `- FOCUS more on these underused topics: ${underusedTopics.join(
-        ", "
+        ", ",
       )}\n`;
     }
     guidance +=
@@ -320,7 +306,7 @@ const parseJsonSafely = (jsonString: string): any => {
             const end = Math.min(jsonString.length, pos + 50);
             console.error(
               `JSON error at position ${pos}:`,
-              jsonString.substring(start, end)
+              jsonString.substring(start, end),
             );
           }
         }
@@ -340,7 +326,7 @@ const generateBatch = async (
   batchNumber?: number,
   totalBatches?: number,
   retryCount: number = 0,
-  isUsingSummary: boolean = false
+  isUsingSummary: boolean = false,
 ): Promise<any[]> => {
   const batchInfo =
     batchNumber && totalBatches
@@ -372,13 +358,9 @@ COMPETITIVE ENTRANCE EXAM QUESTION STANDARDS:
 - Questions must match the complexity and rigor of actual competitive entrance exam questions
 
 LANGUAGE REQUIREMENT (CRITICAL - MUST FOLLOW STRICTLY):
-- If the subject name indicates this is a LANGUAGE subject (e.g., contains words like "Language", "Urdu", "Hindi", "English", "French", "Spanish", "German", "Arabic", "Sanskrit", or any language name), then:
-  - ALL questions MUST be written ENTIRELY in that specific language
-  - ALL question text, ALL options, and ALL correct answers MUST be in the same language
-  - DO NOT mix languages - every single word must be in the specified language
-  - If you generate even one question in a different language, the entire batch is incorrect
-  - This is MANDATORY and NON-NEGOTIABLE - 100% of questions must be in the specified language
-  - Check the subject name carefully - if it's a language subject, apply this rule to EVERY question without exception
+- By default, ALL questions, options, and answers MUST be written entirely in ENGLISH.
+- EXCEPTION: If the subject name indicates this is a FOREIGN LANGUAGE or REGIONAL LANGUAGE subject (e.g., contains words like "Urdu", "Hindi", "French", "Spanish", "German", "Arabic", "Sanskrit", etc.), ONLY THEN must you write the questions entirely in that specific language.
+- DO NOT mix languages, and DO NOT output in Hindi, Spanish, or any other language UNLESS the subject name specifically demands it. Make absolutely sure the default is English!
 
 QUESTION QUALITY REQUIREMENTS:
 1. Question text must be clear, concise, and grammatically correct
@@ -416,8 +398,7 @@ CRITICAL REQUIREMENTS:
 
 JSON FORMATTING RULES:
 - All strings must be properly escaped for JSON
-- If using mathematical notation or LaTeX, escape backslashes properly: use \\\\ for a single backslash
-- Example: "f(x) = x^2" is fine, but "f(x) = \\frac{1}{2}" needs double backslashes: "f(x) = \\\\frac{1}{2}"
+- CRITICAL MATH ESCAPING: For LaTeX or math notation, NEVER use a single backslash like "\\( " or "\\[". You MUST use DOUBLE backslashes: "\\\\" (e.g., "\\\\( x^2 \\\\)" or "\\\\[ \\\\frac{1}{2} \\\\]"). Single backslashes will cause the JSON parser to crash immediately.
 - All special characters in strings must be JSON-escaped
 - No trailing commas
 - No comments
@@ -454,13 +435,26 @@ Return ONLY the JSON array. Do not include markdown code blocks, explanations, o
     });
 
     if (response) {
+      const usage: any = response.usage || {};
+      const promptTokens = usage.input_tokens || usage.prompt_tokens || 0;
+      const completionTokens =
+        usage.output_tokens || usage.completion_tokens || 0;
+      const totalTokens = usage.total_tokens || promptTokens + completionTokens;
+      // gpt-4o costs: $2.50 / 1M input, $10.00 / 1M output
+      const cost =
+        (promptTokens / 1000000) * 2.5 + (completionTokens / 1000000) * 10.0;
+
       console.log(
-        `Batch ${batchNumber || 1} - Tokens used:`,
-        response?.usage?.total_tokens
+        `\n📊 TOKEN USAGE (PDF Route/Batch ${batchNumber || 1} - gpt-4o):`,
       );
+      console.log(`   - Input/Prompt Tokens: ${promptTokens}`);
+      console.log(`   - Output/Completion Tokens: ${completionTokens}`);
+      console.log(`   - Total Tokens: ${totalTokens}`);
+      console.log(`   - Estimated Cost: $${cost.toFixed(4)}\n`);
     }
 
     const rawOutput = response.output_text || "[]";
+    console.log("=== ACTUAL OPENAI RESPONSE (PDF ROUTE/BATCH) ===", rawOutput);
 
     try {
       const cleanedOutput = cleanJsonOutput(rawOutput);
@@ -469,7 +463,7 @@ Return ONLY the JSON array. Do not include markdown code blocks, explanations, o
     } catch (error) {
       console.error(
         `Failed to parse AI output for batch ${batchNumber || 1}:`,
-        error
+        error,
       );
       console.log("Raw output (first 500 chars):", rawOutput.substring(0, 500));
       return [];
@@ -483,7 +477,7 @@ Return ONLY the JSON array. Do not include markdown code blocks, explanations, o
       console.error(
         `Context window exceeded for batch ${
           batchNumber || 1
-        } with ${batchSize} questions`
+        } with ${batchSize} questions`,
       );
 
       if (batchSize > 5 && retryCount < MAX_RETRIES) {
@@ -493,7 +487,7 @@ Return ONLY the JSON array. Do not include markdown code blocks, explanations, o
             batchNumber || 1
           } with reduced size: ${reducedBatchSize} questions (attempt ${
             retryCount + 1
-          }/${MAX_RETRIES})`
+          }/${MAX_RETRIES})`,
         );
         await new Promise((resolve) => setTimeout(resolve, 3000));
         return await generateBatch(
@@ -503,13 +497,13 @@ Return ONLY the JSON array. Do not include markdown code blocks, explanations, o
           batchNumber,
           totalBatches,
           retryCount + 1,
-          isUsingSummary
+          isUsingSummary,
         );
       } else {
         console.error(
           `Cannot reduce batch size further or max retries reached for batch ${
             batchNumber || 1
-          }`
+          }`,
         );
         return [];
       }
@@ -520,7 +514,7 @@ Return ONLY the JSON array. Do not include markdown code blocks, explanations, o
       console.log(
         `Retrying batch ${batchNumber || 1} after ${delay}ms (attempt ${
           retryCount + 1
-        }/${MAX_RETRIES})`
+        }/${MAX_RETRIES})`,
       );
       await new Promise((resolve) => setTimeout(resolve, delay));
       return await generateBatch(
@@ -530,7 +524,7 @@ Return ONLY the JSON array. Do not include markdown code blocks, explanations, o
         batchNumber,
         totalBatches,
         retryCount + 1,
-        isUsingSummary
+        isUsingSummary,
       );
     }
 
@@ -543,7 +537,7 @@ export const GenerateAIQuestions = async (
   source: string,
   numQuestions?: number,
   subjectId?: string,
-  isUsingSummary: boolean = false
+  isUsingSummary: boolean = false,
 ) => {
   const numQuestionsEnv = process.env.NUM_QUESTIONS;
   const finalNumQuestions =
@@ -554,13 +548,9 @@ export const GenerateAIQuestions = async (
 You are an expert COMPETITIVE ENTRANCE EXAM question generator specializing in high-stakes entrance examinations. Analyze the provided previous year question paper from a competitive entrance examination and generate new questions that match the exact format, style, difficulty level, and question patterns typical of competitive entrance examinations (such as NEET, JEE, CUET, CLAT, CAT, etc.).
 
 LANGUAGE REQUIREMENT (CRITICAL - MUST FOLLOW STRICTLY):
-- If the subject name indicates this is a LANGUAGE subject (e.g., contains words like "Language", "Urdu", "Hindi", "English", "French", "Spanish", "German", "Arabic", "Sanskrit", or any language name), then:
-  - ALL questions MUST be written ENTIRELY in that specific language
-  - ALL question text, ALL options, and ALL correct answers MUST be in the same language
-  - DO NOT mix languages - every single word must be in the specified language
-  - If you generate even one question in a different language, the entire batch is incorrect
-  - This is MANDATORY and NON-NEGOTIABLE - 100% of questions must be in the specified language
-  - Check the subject name carefully - if it's a language subject, apply this rule to EVERY question without exception
+- By default, ALL questions, options, and answers MUST be written entirely in ENGLISH.
+- EXCEPTION: If the subject name indicates this is a FOREIGN LANGUAGE or REGIONAL LANGUAGE subject (e.g., contains words like "Urdu", "Hindi", "French", "Spanish", "German", "Arabic", "Sanskrit", etc.), ONLY THEN must you write the questions entirely in that specific language.
+- DO NOT mix languages, and DO NOT output in Hindi, Spanish, or any other language UNLESS the subject name specifically demands it. Make absolutely sure the default is English!
 
 COMPETITIVE ENTRANCE EXAM QUESTION STANDARDS:
 - Questions must test CONCEPTUAL UNDERSTANDING, not just memorization
@@ -608,8 +598,7 @@ CRITICAL REQUIREMENTS:
 
 JSON FORMATTING RULES:
 - All strings must be properly escaped for JSON
-- If using mathematical notation or LaTeX, escape backslashes properly: use \\\\ for a single backslash
-- Example: "f(x) = x^2" is fine, but "f(x) = \\frac{1}{2}" needs double backslashes: "f(x) = \\\\frac{1}{2}"
+- CRITICAL MATH ESCAPING: For LaTeX or math notation, NEVER use a single backslash like "\\( " or "\\[". You MUST use DOUBLE backslashes: "\\\\" (e.g., "\\\\( x^2 \\\\)" or "\\\\[ \\\\frac{1}{2} \\\\]"). Single backslashes will cause the JSON parser to crash immediately.
 - All special characters in strings must be JSON-escaped
 - No trailing commas
 - No comments
@@ -645,10 +634,24 @@ Return ONLY the JSON array. Do not include markdown code blocks, explanations, o
     });
 
     if (response) {
-      console.log("Tokens used:", response?.usage?.total_tokens);
+      const usage: any = response.usage || {};
+      const promptTokens = usage.input_tokens || usage.prompt_tokens || 0;
+      const completionTokens =
+        usage.output_tokens || usage.completion_tokens || 0;
+      const totalTokens = usage.total_tokens || promptTokens + completionTokens;
+      // gpt-4o costs: $2.50 / 1M input, $10.00 / 1M output
+      const cost =
+        (promptTokens / 1000000) * 2.5 + (completionTokens / 1000000) * 10.0;
+
+      console.log(`\n📊 TOKEN USAGE (PDF Route/Single - gpt-4o):`);
+      console.log(`   - Input/Prompt Tokens: ${promptTokens}`);
+      console.log(`   - Output/Completion Tokens: ${completionTokens}`);
+      console.log(`   - Total Tokens: ${totalTokens}`);
+      console.log(`   - Estimated Cost: $${cost.toFixed(4)}\n`);
     }
 
     const rawOutput = response.output_text || "[]";
+    console.log("=== ACTUAL OPENAI RESPONSE (PDF ROUTE/SINGLE) ===", rawOutput);
 
     try {
       // Clean the output to remove markdown code blocks
@@ -673,26 +676,21 @@ Return ONLY the JSON array. Do not include markdown code blocks, explanations, o
       undefined,
       undefined,
       0,
-      isUsingSummary
+      isUsingSummary,
     );
 
-    // Add embeddings and topics
-    const questionsWithEmbeddings = await Promise.all(
-      questions.map(async (q: any) => ({
-        ...q,
-        embedding: await generateEmbedding(
-          `${q.questionsText} ${q.Options.join(" ")}`
-        ),
-        topics: extractTopics(q),
-      }))
-    );
+    // Add topics (removed embedding)
+    const questionsWithTopics = questions.map((q: any) => ({
+      ...q,
+      topics: extractTopics(q),
+    }));
 
     // Filter duplicates if subjectId is provided
     if (subjectId) {
-      return await filterDuplicates(questionsWithEmbeddings, subjectId);
+      return await filterDuplicates(questionsWithTopics, subjectId);
     }
 
-    return questionsWithEmbeddings;
+    return questionsWithTopics;
   }
 
   // Calculate batches with dynamic batch size
@@ -702,7 +700,7 @@ Return ONLY the JSON array. Do not include markdown code blocks, explanations, o
   let consecutiveFailures = 0;
 
   console.log(
-    `Generating ${finalNumQuestions} questions in batches (starting with ${currentBatchSize} questions per batch)`
+    `Generating ${finalNumQuestions} questions in batches (starting with ${currentBatchSize} questions per batch)`,
   );
 
   // Process batches sequentially to avoid rate limits
@@ -713,7 +711,7 @@ Return ONLY the JSON array. Do not include markdown code blocks, explanations, o
     // If we need very few questions, just generate them
     if (remainingQuestions <= 5) {
       console.log(
-        `Final batch: generating remaining ${remainingQuestions} questions...`
+        `Final batch: generating remaining ${remainingQuestions} questions...`,
       );
       let batchQuestions = await generateBatch(
         source,
@@ -722,35 +720,30 @@ Return ONLY the JSON array. Do not include markdown code blocks, explanations, o
         batchNumber,
         undefined,
         0,
-        isUsingSummary
+        isUsingSummary,
       );
 
       if (batchQuestions && batchQuestions.length > 0) {
-        // Add embeddings and topics
-        const questionsWithEmbeddings = await Promise.all(
-          batchQuestions.map(async (q: any) => ({
-            ...q,
-            embedding: await generateEmbedding(
-              `${q.questionsText} ${q.Options.join(" ")}`
-            ),
-            topics: extractTopics(q),
-          }))
-        );
+        // Add topics (removed embedding)
+        const questionsWithTopics = batchQuestions.map((q: any) => ({
+          ...q,
+          topics: extractTopics(q),
+        }));
 
         // Filter duplicates if subjectId is provided
         if (subjectId) {
           batchQuestions = await filterDuplicates(
-            questionsWithEmbeddings,
-            subjectId
+            questionsWithTopics,
+            subjectId,
           );
         } else {
-          batchQuestions = questionsWithEmbeddings;
+          batchQuestions = questionsWithTopics;
         }
 
         if (batchQuestions.length > 0) {
           allQuestions.push(...batchQuestions);
           console.log(
-            `Final batch completed: ${batchQuestions.length} unique questions generated (Total: ${allQuestions.length}/${finalNumQuestions})`
+            `Final batch completed: ${batchQuestions.length} unique questions generated (Total: ${allQuestions.length}/${finalNumQuestions})`,
           );
         }
       }
@@ -759,7 +752,7 @@ Return ONLY the JSON array. Do not include markdown code blocks, explanations, o
 
     const estimatedBatches = Math.ceil(remainingQuestions / currentBatchSize);
     console.log(
-      `Batch ${batchNumber}/${estimatedBatches}: Generating ${actualBatchSize} questions...`
+      `Batch ${batchNumber}/${estimatedBatches}: Generating ${actualBatchSize} questions...`,
     );
 
     let batchQuestions = await generateBatch(
@@ -769,54 +762,46 @@ Return ONLY the JSON array. Do not include markdown code blocks, explanations, o
       batchNumber,
       estimatedBatches,
       0,
-      isUsingSummary
+      isUsingSummary,
     );
 
     if (batchQuestions && batchQuestions.length > 0) {
-      // Add embeddings and topics
-      const questionsWithEmbeddings = await Promise.all(
-        batchQuestions.map(async (q: any) => ({
-          ...q,
-          embedding: await generateEmbedding(
-            `${q.questionsText} ${q.Options.join(" ")}`
-          ),
-          topics: extractTopics(q),
-        }))
-      );
+      // Add topics
+      const questionsWithTopics = batchQuestions.map((q: any) => ({
+        ...q,
+        topics: extractTopics(q),
+      }));
 
       // Filter duplicates if subjectId is provided
       if (subjectId) {
-        batchQuestions = await filterDuplicates(
-          questionsWithEmbeddings,
-          subjectId
-        );
+        batchQuestions = await filterDuplicates(questionsWithTopics, subjectId);
       } else {
-        batchQuestions = questionsWithEmbeddings;
+        batchQuestions = questionsWithTopics;
       }
 
       if (batchQuestions.length > 0) {
         allQuestions.push(...batchQuestions);
         consecutiveFailures = 0; // Reset failure counter on success
         console.log(
-          `Batch ${batchNumber} completed: ${batchQuestions.length} questions added (Total: ${allQuestions.length}/${finalNumQuestions})`
+          `Batch ${batchNumber} completed: ${batchQuestions.length} questions added (Total: ${allQuestions.length}/${finalNumQuestions})`,
         );
       } else {
         console.warn(
-          `Batch ${batchNumber} had no unique questions after deduplication`
+          `Batch ${batchNumber} had no unique questions after deduplication`,
         );
         consecutiveFailures++;
       }
     } else {
       consecutiveFailures++;
       console.warn(
-        `Batch ${batchNumber} returned no questions (consecutive failures: ${consecutiveFailures})`
+        `Batch ${batchNumber} returned no questions (consecutive failures: ${consecutiveFailures})`,
       );
 
       // If we have multiple consecutive failures, reduce batch size
       if (consecutiveFailures >= 2 && currentBatchSize > 5) {
         currentBatchSize = Math.max(5, Math.floor(currentBatchSize / 2));
         console.log(
-          `Reducing batch size to ${currentBatchSize} due to consecutive failures`
+          `Reducing batch size to ${currentBatchSize} due to consecutive failures`,
         );
         consecutiveFailures = 0; // Reset after adjusting
       }
@@ -824,7 +809,7 @@ Return ONLY the JSON array. Do not include markdown code blocks, explanations, o
       // If we've failed too many times, stop to avoid infinite loop
       if (consecutiveFailures >= 5) {
         console.error(
-          `Too many consecutive failures. Stopping generation. Generated ${allQuestions.length} out of ${finalNumQuestions} questions.`
+          `Too many consecutive failures. Stopping generation. Generated ${allQuestions.length} out of ${finalNumQuestions} questions.`,
         );
         break;
       }
@@ -839,7 +824,7 @@ Return ONLY the JSON array. Do not include markdown code blocks, explanations, o
   }
 
   console.log(
-    `Question generation complete: ${allQuestions.length} questions generated (requested: ${finalNumQuestions})`
+    `Question generation complete: ${allQuestions.length} questions generated (requested: ${finalNumQuestions})`,
   );
 
   return allQuestions;

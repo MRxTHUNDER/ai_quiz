@@ -15,7 +15,7 @@ const USER_PDF_COOLDOWN_DAYS = Number(process.env.USER_PDF_COOLDOWN_DAYS || 15);
 const USER_PDF_MAX_SIZE_MB = Number(process.env.USER_PDF_MAX_SIZE_MB || 5);
 const USER_PDF_MAX_PAGES = Number(process.env.USER_PDF_MAX_PAGES || 30);
 const USER_PDF_MAX_QUESTIONS = Number(
-  process.env.USER_PDF_MAX_QUESTIONS || 100
+  process.env.USER_PDF_MAX_QUESTIONS || 100,
 );
 const MAX_QUESTIONS_PER_PERIOD = 50; // Max 50 questions per 15 days
 
@@ -23,7 +23,7 @@ const MAX_QUESTIONS_PER_PERIOD = 50; // Max 50 questions per 15 days
  * Check if user has uploaded PDF before (can only upload once)
  */
 async function hasUserUploadedPdf(
-  userId: string
+  userId: string,
 ): Promise<{ hasUploaded: boolean; uploadDate?: Date }> {
   const pdfUpload = await UserPdfUpload.findOne({
     userId,
@@ -61,12 +61,12 @@ async function canUserGenerateQuestions(userId: string): Promise<{
   // Calculate total questions generated in the period
   const questionsGenerated = recentGenerations.reduce(
     (sum, gen) => sum + (gen.questionsGenerated || 0),
-    0
+    0,
   );
 
   const questionsRemaining = Math.max(
     0,
-    MAX_QUESTIONS_PER_PERIOD - questionsGenerated
+    MAX_QUESTIONS_PER_PERIOD - questionsGenerated,
   );
   const allowed = questionsGenerated < MAX_QUESTIONS_PER_PERIOD;
 
@@ -74,7 +74,7 @@ async function canUserGenerateQuestions(userId: string): Promise<{
   let nextResetDate: Date | undefined;
   if (recentGenerations.length > 0) {
     const oldestGeneration = recentGenerations.reduce((oldest, gen) =>
-      gen.uploadedAt < oldest.uploadedAt ? gen : oldest
+      gen.uploadedAt < oldest.uploadedAt ? gen : oldest,
     );
     nextResetDate = new Date(oldestGeneration.uploadedAt);
     nextResetDate.setDate(nextResetDate.getDate() + USER_PDF_COOLDOWN_DAYS);
@@ -219,14 +219,14 @@ export const GetUserPresignedUrl = async (req: Request, res: Response) => {
  */
 async function validatePDF(
   fileBuffer: Buffer,
-  fileSizeMB: number
+  fileSizeMB: number,
 ): Promise<{ valid: boolean; error?: string; pageCount?: number }> {
   // Check file size
   if (fileSizeMB > USER_PDF_MAX_SIZE_MB) {
     return {
       valid: false,
       error: `File size (${fileSizeMB.toFixed(
-        2
+        2,
       )}MB) exceeds maximum allowed size of ${USER_PDF_MAX_SIZE_MB}MB`,
     };
   }
@@ -340,7 +340,7 @@ export const TagUserPDF = async (req: Request, res: Response) => {
 
     // Ensure subject is in entrance exam
     const subjectExists = entranceExam.subjects.some(
-      (sub: any) => sub.subject.toString() === subject._id.toString()
+      (sub: any) => sub.subject.toString() === subject._id.toString(),
     );
 
     if (!subjectExists) {
@@ -376,7 +376,7 @@ export const TagUserPDF = async (req: Request, res: Response) => {
         pdf._id.toString(),
         finalFileUrl,
         subject._id.toString(),
-        entranceExam._id.toString()
+        entranceExam._id.toString(),
       );
       console.log("Summary processed successfully");
     } catch (summaryError) {
@@ -389,7 +389,7 @@ export const TagUserPDF = async (req: Request, res: Response) => {
     const numQuestions = Math.min(
       USER_PDF_MAX_QUESTIONS,
       questionGenCheckForPDF.questionsRemaining,
-      MAX_QUESTIONS_PER_PERIOD
+      MAX_QUESTIONS_PER_PERIOD,
     );
 
     if (numQuestions <= 0) {
@@ -417,7 +417,7 @@ export const TagUserPDF = async (req: Request, res: Response) => {
 
     try {
       console.log(
-        `Generating ${numQuestions} questions for user PDF: ${subject.subjectName}`
+        `Generating ${numQuestions} questions for user PDF: ${subject.subjectName}`,
       );
 
       let questions = null;
@@ -430,12 +430,12 @@ export const TagUserPDF = async (req: Request, res: Response) => {
             summary.summaryText,
             numQuestions,
             subject._id.toString(),
-            true
+            true,
           );
           console.log(
             `Successfully generated ${
               questions?.length || 0
-            } questions from summary`
+            } questions from summary`,
           );
         } catch (summaryGenError) {
           console.error("Summary-based generation failed:", summaryGenError);
@@ -446,15 +446,15 @@ export const TagUserPDF = async (req: Request, res: Response) => {
       // Fallback: Generate questions based on subject knowledge (no PDF/summary needed)
       if (!questions || questions.length === 0) {
         console.log(
-          `Generating questions from subject knowledge: ${subject.subjectName} (${entranceExam.entranceExamName})...`
+          `Generating questions from subject knowledge: ${subject.subjectName} (${entranceExam.entranceExamName})...`,
         );
         questions = await GenerateQuestionsFromSubjectKnowledge(
           subject.subjectName,
           entranceExam.entranceExamName,
-          numQuestions
+          numQuestions,
         );
         console.log(
-          `Generated ${questions?.length || 0} questions from subject knowledge`
+          `Generated ${questions?.length || 0} questions from subject knowledge`,
         );
       }
 
@@ -464,14 +464,14 @@ export const TagUserPDF = async (req: Request, res: Response) => {
           Options: q.Options,
           correctOption: q.correctOption,
           SubjectId: subject._id,
-          embedding: q.embedding,
+          entranceExam: entranceExam._id,
           topics: q.topics,
           createdBy: userId || undefined,
         }));
 
         generatedQuestions = await QuestionModel.insertMany(formattedQuestions);
         console.log(
-          `Successfully generated and saved ${generatedQuestions.length} questions`
+          `Successfully generated and saved ${generatedQuestions.length} questions`,
         );
 
         // Record the upload in UserPdfUpload
@@ -516,7 +516,7 @@ export const TagUserPDF = async (req: Request, res: Response) => {
  */
 export const GenerateQuestionsDirectUser = async (
   req: Request,
-  res: Response
+  res: Response,
 ) => {
   try {
     const { entranceExamId, subjectId, topic, numQuestions } = req.body;
@@ -557,7 +557,7 @@ export const GenerateQuestionsDirectUser = async (
     const finalNumQuestions = Math.min(
       requestedQuestions,
       questionGenCheck.questionsRemaining,
-      MAX_QUESTIONS_PER_PERIOD
+      MAX_QUESTIONS_PER_PERIOD,
     );
 
     if (finalNumQuestions <= 0) {
@@ -617,7 +617,7 @@ export const GenerateQuestionsDirectUser = async (
     console.log(
       `Generating ${finalNumQuestions} questions for ${subject.subjectName} (${
         entranceExam.entranceExamName
-      })${topic ? ` - Topic: ${topic}` : ""}`
+      })${topic ? ` - Topic: ${topic}` : ""}`,
     );
 
     // Generate questions using subject knowledge
@@ -625,7 +625,7 @@ export const GenerateQuestionsDirectUser = async (
       subject.subjectName,
       entranceExam.entranceExamName,
       finalNumQuestions,
-      topic || undefined
+      topic || undefined,
     );
 
     let generatedQuestions = null;
@@ -643,7 +643,7 @@ export const GenerateQuestionsDirectUser = async (
       // Save questions to database
       generatedQuestions = await QuestionModel.insertMany(formattedQuestions);
       console.log(
-        `Successfully generated and saved ${generatedQuestions.length} questions`
+        `Successfully generated and saved ${generatedQuestions.length} questions`,
       );
     } else {
       console.warn("No questions generated from AI service");

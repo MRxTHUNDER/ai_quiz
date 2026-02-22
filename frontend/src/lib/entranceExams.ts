@@ -19,6 +19,9 @@ export interface EntranceExam {
   notes?: string;
   isEnabled?: boolean;
   displayOrder?: number;
+  bannerImageUrl?: string;
+  description?: string;
+  bannerSubjects?: string[];
 }
 
 export interface EntranceExamsResponse {
@@ -28,9 +31,8 @@ export interface EntranceExamsResponse {
 
 export async function getAllEntranceExams(): Promise<EntranceExam[]> {
   try {
-    const response = await axiosInstance.get<EntranceExamsResponse>(
-      "/entrance-exam"
-    );
+    const response =
+      await axiosInstance.get<EntranceExamsResponse>("/entrance-exam");
 
     const exams = response.data.exams || [];
 
@@ -41,8 +43,7 @@ export async function getAllEntranceExams(): Promise<EntranceExam[]> {
       .filter((exam) => exam.isEnabled !== false)
       .map((exam) => ({
         ...exam,
-        subjects:
-          exam.subjects?.filter((sub) => sub.isEnabled !== false) ?? [],
+        subjects: exam.subjects?.filter((sub) => sub.isEnabled !== false) ?? [],
       }));
   } catch (error) {
     console.error("Error fetching entrance exams:", error);
@@ -69,8 +70,7 @@ export async function getEntranceExamById(id: string): Promise<EntranceExam> {
 
     return {
       ...exam,
-      subjects:
-        exam.subjects?.filter((sub) => sub.isEnabled !== false) ?? [],
+      subjects: exam.subjects?.filter((sub) => sub.isEnabled !== false) ?? [],
     };
   } catch (error) {
     console.error("Error fetching entrance exam:", error);
@@ -97,10 +97,10 @@ export function getSubjectNamesFromExam(exam: EntranceExam): string[] {
  */
 export function getSubjectIdFromExam(
   exam: EntranceExam,
-  subjectName: string
+  subjectName: string,
 ): string | null {
   const subject = exam.subjects.find(
-    (sub) => sub.subject?.subjectName?.trim() === subjectName.trim()
+    (sub) => sub.subject?.subjectName?.trim() === subjectName.trim(),
   );
   return subject?.subject?._id || null;
 }
@@ -110,10 +110,10 @@ export function getSubjectIdFromExam(
  */
 export function getSubjectDuration(
   exam: EntranceExam,
-  subjectName: string
+  subjectName: string,
 ): number | null {
   const subject = exam.subjects.find(
-    (sub) => sub.subject?.subjectName?.trim() === subjectName.trim()
+    (sub) => sub.subject?.subjectName?.trim() === subjectName.trim(),
   );
   return subject?.durationMinutes || null;
 }

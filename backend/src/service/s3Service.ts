@@ -15,10 +15,11 @@ const s3Client = new S3Client({
 
 export const getPresignUploadUrl = async (
   fileName: string,
-  contentType: string
+  contentType: string,
+  folderName: string = "pdf",
 ) => {
   const sanitizedFileName = fileName.replace(/\s+/g, "_");
-  const key = `uploads/pdf/${sanitizedFileName}`;
+  const key = `uploads/${folderName}/${sanitizedFileName}`;
 
   const command = new PutObjectCommand({
     Bucket: process.env.R2_BUCKET_NAME || "",

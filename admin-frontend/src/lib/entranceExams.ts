@@ -20,6 +20,10 @@ export interface EntranceExam {
   notes?: string;
   isEnabled?: boolean;
   displayOrder?: number;
+  bannerImageUrl?: string;
+  description?: string;
+  bannerSubjects?: string[];
+  weeklyLimit?: number;
 }
 
 export interface EntranceExamsResponse {
@@ -33,7 +37,7 @@ export interface EntranceExamsResponse {
 export async function getAllEntranceExams(): Promise<EntranceExam[]> {
   try {
     const response = await axiosInstance.get<EntranceExamsResponse>(
-      "/entrance-exam?includeDisabled=true"
+      "/entrance-exam?includeDisabled=true",
     );
     return response.data.exams || [];
   } catch (error) {
@@ -80,10 +84,10 @@ export function getSubjectNamesFromExam(exam: EntranceExam): string[] {
  */
 export function getSubjectDuration(
   exam: EntranceExam,
-  subjectName: string
+  subjectName: string,
 ): number | null {
   const subject = exam.subjects.find(
-    (sub) => sub.subject?.subjectName?.trim() === subjectName.trim()
+    (sub) => sub.subject?.subjectName?.trim() === subjectName.trim(),
   );
   return subject?.durationMinutes || null;
 }
@@ -99,13 +103,17 @@ export interface CreateExamData {
   }>;
   notes?: string;
   isEnabled?: boolean;
+  bannerImageUrl?: string;
+  description?: string;
+  bannerSubjects?: string[];
+  weeklyLimit?: number;
 }
 
 /**
  * Create a new entrance exam
  */
 export async function createEntranceExam(
-  data: CreateExamData
+  data: CreateExamData,
 ): Promise<EntranceExam> {
   try {
     const response = await axiosInstance.post<{
@@ -124,7 +132,7 @@ export async function createEntranceExam(
  */
 export async function updateEntranceExam(
   id: string,
-  data: Partial<CreateExamData>
+  data: Partial<CreateExamData>,
 ): Promise<EntranceExam> {
   try {
     const response = await axiosInstance.put<{
@@ -154,7 +162,7 @@ export async function deleteEntranceExam(id: string): Promise<void> {
  * Update the display order of exams
  */
 export async function updateExamOrder(
-  examOrders: Array<{ examId: string; displayOrder: number }>
+  examOrders: Array<{ examId: string; displayOrder: number }>,
 ): Promise<void> {
   try {
     await axiosInstance.post("/entrance-exam/reorder", { examOrders });

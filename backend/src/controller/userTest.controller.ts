@@ -17,7 +17,7 @@ import mongoose from "mongoose";
 async function getAnsweredQuestionIds(
   userId: string,
   entranceExamId: string,
-  subjectId: string
+  subjectId: string,
 ): Promise<Set<string>> {
   // First, find all test IDs for this entrance exam and subject
   const testsForSubject = await TestModel.find({
@@ -128,7 +128,7 @@ export const GetUserTests = async (req: Request, res: Response) => {
     const filter: any = {};
     if (entranceExamId) {
       filter.entranceExamId = new mongoose.Types.ObjectId(
-        entranceExamId as string
+        entranceExamId as string,
       );
     }
     if (subjectId) {
@@ -141,7 +141,7 @@ export const GetUserTests = async (req: Request, res: Response) => {
       .populate("testSubject", "subjectName testDuration")
       .populate("entranceExamId", "entranceExamName entranceExamId")
       .select(
-        "_id entranceExamId testSubject questions totalQuestions durationMinutes createdAt updatedAt"
+        "_id entranceExamId testSubject questions totalQuestions durationMinutes createdAt updatedAt",
       )
       .skip(skip)
       .limit(limit)
@@ -264,8 +264,11 @@ export const StartTest = async (req: Request, res: Response) => {
 
     // Get test details with questions
     const test = await TestModel.findById(testId)
-      .populate("testSubject", "subjectName _id")
-      .populate("entranceExamId", "_id entranceExamName entranceExamId")
+      .populate("testSubject", "subjectName _id weeklyLimit")
+      .populate(
+        "entranceExamId",
+        "_id entranceExamName entranceExamId weeklyLimit",
+      )
       .populate("questions", "_id");
 
     if (!test) {
@@ -305,22 +308,44 @@ export const StartTest = async (req: Request, res: Response) => {
       return;
     }
 
-    // Check if user has already answered questions for this entrance exam + subject
     const subjectId = (test.testSubject as any)._id.toString();
+
+    // -- Weekly Limits Validation --
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+    // 1. Check Entrance Exam weekly limit
+    const examWeeklyLimit = (entranceExam as any).weeklyLimit ?? 7;
+    const examAttemptsCount = await UserResult.countDocuments({
+      userId,
+      entranceExamId: new mongoose.Types.ObjectId(testEntranceExamId),
+      createdAt: { $gte: sevenDaysAgo },
+    });
+
+    if (examAttemptsCount >= examWeeklyLimit) {
+      res.status(403).json({
+        success: false,
+        message: `Weekly limit of ${examWeeklyLimit} tests reached for this exam.`,
+      });
+      return;
+    }
+    // -- End Weekly Limits Validation --
+
+    // Check if user has already answered questions for this entrance exam + subject
     const answeredQuestionIds = await getAnsweredQuestionIds(
       userId,
       entranceExamId,
-      subjectId
+      subjectId,
     );
 
     // Get all question IDs in this test
     const testQuestionIds = (test.questions as any[]).map((q: any) =>
-      q._id.toString()
+      q._id.toString(),
     );
 
     // Filter out already answered questions
     const availableQuestionIds = testQuestionIds.filter(
-      (qId) => !answeredQuestionIds.has(qId)
+      (qId) => !answeredQuestionIds.has(qId),
     );
 
     // Check if we have enough new questions
@@ -342,7 +367,7 @@ export const StartTest = async (req: Request, res: Response) => {
     if (availableQuestionIds.length < test.totalQuestions) {
       console.warn(
         `User ${userId} starting test with only ${availableQuestionIds.length} new questions ` +
-          `(requires ${test.totalQuestions}, already answered ${answeredQuestionIds.size})`
+          `(requires ${test.totalQuestions}, already answered ${answeredQuestionIds.size})`,
       );
     }
 
@@ -350,7 +375,7 @@ export const StartTest = async (req: Request, res: Response) => {
     // Use actual available questions count (or required count, whichever is smaller)
     const actualTotalQuestions = Math.min(
       test.totalQuestions,
-      availableQuestionIds.length
+      availableQuestionIds.length,
     );
 
     const startTime = new Date();
@@ -470,12 +495,12 @@ export const GetTestQuestions = async (req: Request, res: Response) => {
     const answeredQuestionIds = await getAnsweredQuestionIds(
       userId,
       attempt.entranceExamId.toString(),
-      (test.testSubject as any)._id.toString()
+      (test.testSubject as any)._id.toString(),
     );
 
     // Filter out questions that user has already answered
     const availableQuestions = (test.questions as any[]).filter(
-      (question: any) => !answeredQuestionIds.has(question._id.toString())
+      (question: any) => !answeredQuestionIds.has(question._id.toString()),
     );
 
     // Check if we have enough new questions
@@ -484,7 +509,7 @@ export const GetTestQuestions = async (req: Request, res: Response) => {
       // You can adjust this logic based on your requirements
       console.warn(
         `User ${userId} has already answered ${answeredQuestionIds.size} questions. ` +
-          `Only ${availableQuestions.length} new questions available, but test requires ${test.totalQuestions}.`
+          `Only ${availableQuestions.length} new questions available, but test requires ${test.totalQuestions}.`,
       );
 
       // Option 1: Return available questions (even if less than required)
@@ -518,7 +543,7 @@ export const GetTestQuestions = async (req: Request, res: Response) => {
     // Limit to totalQuestions (or available count if less)
     const questionsToShow = shuffledQuestions.slice(
       0,
-      Math.min(test.totalQuestions, availableQuestions.length)
+      Math.min(test.totalQuestions, availableQuestions.length),
     );
 
     // Format questions without correct answers
@@ -528,7 +553,7 @@ export const GetTestQuestions = async (req: Request, res: Response) => {
         questionNumber: index + 1,
         questionsText: question.questionsText,
         Options: question.Options,
-      })
+      }),
     );
 
     // Check if we're showing fewer questions than required
@@ -601,7 +626,7 @@ export const SubmitAnswer = async (req: Request, res: Response) => {
 
     // Check if answer already exists
     const existingAnswerIndex = attempt.answers.findIndex(
-      (answer: any) => answer.questionId.toString() === questionId
+      (answer: any) => answer.questionId.toString() === questionId,
     );
 
     if (existingAnswerIndex >= 0) {
@@ -667,7 +692,7 @@ export const GetTestProgress = async (req: Request, res: Response) => {
     const now = new Date();
     const startTime = new Date(attempt.startTime);
     const elapsedTime = Math.floor(
-      (now.getTime() - startTime.getTime()) / 1000
+      (now.getTime() - startTime.getTime()) / 1000,
     ); // seconds
     const totalTime = test.durationMinutes * 60; // Convert to seconds
     const remainingTime = Math.max(0, totalTime - elapsedTime);
@@ -790,24 +815,22 @@ export const EndTest = async (req: Request, res: Response) => {
     // Calculate final metrics with marking scheme
     const attemptedCount = attempt.answers.length;
     const unansweredCount = attempt.totalQuestions - attemptedCount;
-    
+
     // Apply marking scheme
     const score =
       correctCount * markingScheme.correctMarks +
       incorrectCount * markingScheme.incorrectMarks +
       unansweredCount * markingScheme.unansweredMarks;
-    
+
     const maxScore = attempt.totalQuestions * markingScheme.correctMarks;
     const percentage =
-      maxScore > 0
-        ? Math.round((score / maxScore) * 100 * 100) / 100
-        : 0;
+      maxScore > 0 ? Math.round((score / maxScore) * 100 * 100) / 100 : 0;
 
     // Calculate time taken
     const endTime = new Date();
     const startTime = new Date(attempt.startTime);
     const timeTaken = Math.floor(
-      (endTime.getTime() - startTime.getTime()) / 1000
+      (endTime.getTime() - startTime.getTime()) / 1000,
     ); // seconds
 
     // Update UserResult
@@ -907,7 +930,7 @@ export const AbandonTest = async (req: Request, res: Response) => {
         (test.questions as any[]).forEach((question: any) => {
           correctAnswersMap.set(
             question._id.toString(),
-            question.correctOption
+            question.correctOption,
           );
         });
 
@@ -915,7 +938,7 @@ export const AbandonTest = async (req: Request, res: Response) => {
         let incorrectCount = 0;
         attempt.answers.forEach((answer: any) => {
           const correctOption = correctAnswersMap.get(
-            answer.questionId.toString()
+            answer.questionId.toString(),
           );
           answer.isCorrect = answer.selectedOption === correctOption;
           if (answer.isCorrect) {
@@ -926,7 +949,7 @@ export const AbandonTest = async (req: Request, res: Response) => {
         });
 
         const unansweredCount = attempt.totalQuestions - attempt.answers.length;
-        
+
         // Apply marking scheme
         const score =
           correctCount * markingScheme.correctMarks +
@@ -943,7 +966,7 @@ export const AbandonTest = async (req: Request, res: Response) => {
     attempt.endTime = new Date(); // Track when abandoned
     const startTime = new Date(attempt.startTime);
     attempt.timeTaken = Math.floor(
-      (attempt.endTime.getTime() - startTime.getTime()) / 1000
+      (attempt.endTime.getTime() - startTime.getTime()) / 1000,
     );
 
     await attempt.save();
@@ -1051,24 +1074,22 @@ export const TimeUpTest = async (req: Request, res: Response) => {
     // Calculate final metrics with marking scheme
     const attemptedCount = attempt.answers.length;
     const unansweredCount = attempt.totalQuestions - attemptedCount;
-    
+
     // Apply marking scheme
     const score =
       correctCount * markingScheme.correctMarks +
       incorrectCount * markingScheme.incorrectMarks +
       unansweredCount * markingScheme.unansweredMarks;
-    
+
     const maxScore = attempt.totalQuestions * markingScheme.correctMarks;
     const percentage =
-      maxScore > 0
-        ? Math.round((score / maxScore) * 100 * 100) / 100
-        : 0;
+      maxScore > 0 ? Math.round((score / maxScore) * 100 * 100) / 100 : 0;
 
     // Calculate time taken
     const endTime = new Date();
     const startTime = new Date(attempt.startTime);
     const timeTaken = Math.floor(
-      (endTime.getTime() - startTime.getTime()) / 1000
+      (endTime.getTime() - startTime.getTime()) / 1000,
     );
 
     // Update UserResult
@@ -1245,7 +1266,7 @@ export const GetTestHistory = async (req: Request, res: Response) => {
     const pageNum = Math.max(1, parseInt(page as string) || 1);
     const limitNum = Math.max(
       1,
-      Math.min(100, parseInt(limit as string) || 10)
+      Math.min(100, parseInt(limit as string) || 10),
     );
     const skip = (pageNum - 1) * limitNum;
 
@@ -1272,7 +1293,7 @@ export const GetTestHistory = async (req: Request, res: Response) => {
         ],
       })
       .select(
-        "_id testId entranceExamId score totalQuestions correctCount status createdAt endTime"
+        "_id testId entranceExamId score totalQuestions correctCount status createdAt endTime",
       )
       .skip(skip)
       .limit(limitNum)
@@ -1283,7 +1304,7 @@ export const GetTestHistory = async (req: Request, res: Response) => {
       const percentage =
         attempt.totalQuestions > 0
           ? Math.round(
-              (attempt.correctCount / attempt.totalQuestions) * 100 * 100
+              (attempt.correctCount / attempt.totalQuestions) * 100 * 100,
             ) / 100
           : 0;
 

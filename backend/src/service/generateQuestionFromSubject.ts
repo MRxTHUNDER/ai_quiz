@@ -70,7 +70,7 @@ const parseJsonSafely = (jsonString: string): any => {
             const end = Math.min(jsonString.length, pos + 50);
             console.error(
               `JSON error at position ${pos}:`,
-              jsonString.substring(start, end)
+              jsonString.substring(start, end),
             );
           }
         }
@@ -85,7 +85,7 @@ const generateBatchFromSubject = async (
   entranceExamName: string,
   numQuestions: number,
   topic?: string,
-  batchNumber?: number
+  batchNumber?: number,
 ): Promise<any[]> => {
   let content = "[]";
   try {
@@ -99,13 +99,9 @@ You are an expert question generator specializing in ${entranceExamName} entranc
 Generate ${numQuestions} multiple-choice questions for the subject: ${subjectName}${topicText}
 
 LANGUAGE REQUIREMENT (CRITICAL - MUST FOLLOW STRICTLY):
-- If the subject name "${subjectName}" indicates this is a LANGUAGE subject (e.g., contains words like "Language", "Urdu", "Hindi", "English", "French", "Spanish", "German", "Arabic", "Sanskrit", or any language name), then:
-  - ALL questions MUST be written ENTIRELY in that specific language
-  - ALL question text, ALL options, and ALL correct answers MUST be in the same language
-  - DO NOT mix languages - every single word must be in the specified language
-  - If you generate even one question in a different language, the entire batch is incorrect
-  - This is MANDATORY and NON-NEGOTIABLE - 100% of questions must be in the specified language
-  - Check the subject name carefully - if it's a language subject, apply this rule to EVERY question without exception
+- By default, ALL questions, options, and answers MUST be written entirely in ENGLISH.
+- EXCEPTION: If the subject name "${subjectName}" explicitly indicates this is a FOREIGN LANGUAGE or REGIONAL LANGUAGE subject (e.g., contains words like "Urdu", "Hindi", "French", "Spanish", "German", "Arabic", "Sanskrit", etc.), ONLY THEN must you write the questions entirely in that specific language.
+- DO NOT mix languages, and DO NOT output in Hindi, Spanish, or any other language UNLESS the subject name specifically demands it. Make absolutely sure the default is English!
 
 ENTRANCE EXAM QUESTION STANDARDS FOR ${entranceExamName}:
 - Questions must test DEEP CONCEPTUAL UNDERSTANDING, not just rote memorization
@@ -144,7 +140,9 @@ REQUIREMENTS:
 1. Generate EXACTLY ${numQuestions} high-quality questions
 2. Questions must match ${entranceExamName} exam pattern, difficulty level, and question style
 3. Cover diverse ${
-      topic ? "aspects and applications of " + topic : "important topics and concepts within " + subjectName
+      topic
+        ? "aspects and applications of " + topic
+        : "important topics and concepts within " + subjectName
     }
 4. Each question must have exactly 4 options
 5. Return ONLY valid JSON array - no markdown, no explanations, no additional text
@@ -167,8 +165,8 @@ IMPORTANT:
 - Questions should be factual, accurate, and aligned with ${entranceExamName} standards
 - Difficulty level must match ${entranceExamName} exam expectations
 - Cover various important concepts, principles, and applications in ${subjectName}
-- All strings must be properly JSON-escaped
-- For LaTeX/math notation, use double backslashes: \\\\
+- CRITICAL JSON ESCAPING: All strings must be properly JSON-escaped. 
+- CRITICAL MATH ESCAPING: For LaTeX or math notation, NEVER use a single backslash like "\\( " or "\\[". You MUST use DOUBLE backslashes: "\\\\" (e.g., "\\\\( x^2 \\\\)" or "\\\\[ \\\\frac{1}{2} \\\\]"). Single backslashes will cause the JSON parser to crash immediately.
 - Ensure questions are suitable for competitive entrance exam preparation
 - FINAL CHECK: Before returning the JSON, verify EVERY correctOption is factually correct - do not guess or assume
 
@@ -176,7 +174,7 @@ Return ONLY the JSON array. No markdown code blocks, no explanations, no additio
 `;
 
     const response = await client.responses.create({
-      model: process.env.OPENAI_MODEL || "gpt-4o",
+      model: process.env.OPENAI_MODEL_MINI || "gpt-4o-mini",
       input: [
         {
           role: "user",
@@ -187,6 +185,26 @@ Return ONLY the JSON array. No markdown code blocks, no explanations, no additio
     });
 
     content = response.output_text || "[]";
+    console.log("=== ACTUAL OPENAI RESPONSE (NON-PDF ROUTE) ===", content);
+
+    if (response) {
+      const usage: any = response.usage || {};
+      const promptTokens = usage.input_tokens || usage.prompt_tokens || 0;
+      const completionTokens =
+        usage.output_tokens || usage.completion_tokens || 0;
+      const totalTokens = usage.total_tokens || promptTokens + completionTokens;
+      // gpt-4o-mini costs: $0.15 / 1M input, $0.60 / 1M output
+      const cost =
+        (promptTokens / 1000000) * 0.15 + (completionTokens / 1000000) * 0.6;
+
+      console.log(
+        `\n📊 TOKEN USAGE (NON-PDF Route/Batch ${batchNumber || 1} - gpt-4o-mini):`,
+      );
+      console.log(`   - Input/Prompt Tokens: ${promptTokens}`);
+      console.log(`   - Output/Completion Tokens: ${completionTokens}`);
+      console.log(`   - Total Tokens: ${totalTokens}`);
+      console.log(`   - Estimated Cost: $${cost.toFixed(6)}\n`);
+    }
 
     // Clean and parse with robust error handling
     const cleanedContent = cleanJsonOutput(content);
@@ -195,7 +213,7 @@ Return ONLY the JSON array. No markdown code blocks, no explanations, no additio
     console.log(
       `Batch ${batchNumber || 1}: Generated ${
         questions.length
-      } questions from subject knowledge (${subjectName})`
+      } questions from subject knowledge (${subjectName})`,
     );
 
     return Array.isArray(questions) ? questions : [];
@@ -210,7 +228,7 @@ export const GenerateQuestionsFromSubjectKnowledge = async (
   subjectName: string,
   entranceExamName: string,
   numQuestions: number = 10,
-  topic?: string
+  topic?: string,
 ): Promise<any[]> => {
   // If requesting 10 or fewer questions, do single batch
   if (numQuestions <= BATCH_SIZE) {
@@ -219,7 +237,7 @@ export const GenerateQuestionsFromSubjectKnowledge = async (
       entranceExamName,
       numQuestions,
       topic,
-      1
+      1,
     );
   }
 
@@ -228,7 +246,7 @@ export const GenerateQuestionsFromSubjectKnowledge = async (
   const totalBatches = Math.ceil(numQuestions / BATCH_SIZE);
 
   console.log(
-    `Generating ${numQuestions} questions in ${totalBatches} batches of ${BATCH_SIZE} (${subjectName} - ${entranceExamName})`
+    `Generating ${numQuestions} questions in ${totalBatches} batches of ${BATCH_SIZE} (${subjectName} - ${entranceExamName})`,
   );
 
   for (let i = 0; i < totalBatches; i++) {
@@ -241,13 +259,13 @@ export const GenerateQuestionsFromSubjectKnowledge = async (
       entranceExamName,
       batchSize,
       topic,
-      batchNumber
+      batchNumber,
     );
 
     if (batchQuestions && batchQuestions.length > 0) {
       allQuestions.push(...batchQuestions);
       console.log(
-        `Progress: ${allQuestions.length}/${numQuestions} questions generated`
+        `Progress: ${allQuestions.length}/${numQuestions} questions generated`,
       );
     }
 
@@ -258,7 +276,7 @@ export const GenerateQuestionsFromSubjectKnowledge = async (
   }
 
   console.log(
-    `Completed: ${allQuestions.length} total questions generated (${subjectName} - ${entranceExamName})`
+    `Completed: ${allQuestions.length} total questions generated (${subjectName} - ${entranceExamName})`,
   );
 
   return allQuestions;
