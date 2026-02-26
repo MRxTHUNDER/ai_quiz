@@ -21,6 +21,11 @@ const userPdfUploadSchema = new Schema(
       type: Number,
       default: 0,
     },
+    backgroundJobId: {
+      type: String,
+      required: false,
+      index: true,
+    },
   },
   { timestamps: true }
 );

@@ -6,9 +6,10 @@ import { TestModel } from "../models/test.model";
 import { User } from "../models/user.model";
 import { UserResult } from "../models/userResult.model";
 import { Pdf } from "../models/pdf.model";
+import { NODE_ENV } from "../env";
 
 export const ClearDatabase = async (_req: Request, res: Response) => {
-  if (process.env.NODE_ENV === "production") {
+  if (NODE_ENV === "production") {
     return res.status(403).json({
       success: false,
       message: "This endpoint is not available in production",

@@ -1,10 +1,6 @@
-import OpenAI from "openai";
-import dotenv from "dotenv";
 import { Summary } from "../models/summary.model";
+import { client, OPENAI_MODEL } from "../env";
 
-dotenv.config();
-
-const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 /**
  * Clean JSON output by removing markdown code blocks and extra whitespace
@@ -92,7 +88,7 @@ No markdown code blocks, no explanations, just the JSON object.
 `;
 
     const response = await client.responses.create({
-      model: process.env.OPENAI_MODEL || "gpt-4o",
+      model: OPENAI_MODEL,
       input: [
         {
           role: "user",
@@ -267,7 +263,7 @@ No markdown code blocks, no explanations, just the JSON object.
 `;
 
     const response = await client.responses.create({
-      model: process.env.OPENAI_MODEL || "gpt-4o",
+      model: OPENAI_MODEL,
       input: [
         {
           role: "user",

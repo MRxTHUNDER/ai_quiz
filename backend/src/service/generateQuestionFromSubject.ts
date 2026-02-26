@@ -1,11 +1,7 @@
-import OpenAI from "openai";
-import dotenv from "dotenv";
+import { BATCH_SIZE, client, MAX_RETRIES, OPENAI_MODEL_MINI } from "../env";
 
-dotenv.config();
-
-const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
-const BATCH_SIZE = 10;
+const BATCH_SIZE_QUESTIONS = 50; // Questions per batch
+const MAX_BATCHES = 10; // Maximum number of parallel batches per wave
 const BATCH_DELAY = 2000; // 2 seconds
 
 const fixJsonEscaping = (jsonString: string): string => {
@@ -19,6 +15,24 @@ const fixJsonEscaping = (jsonString: string): string => {
   fixed = fixed.replace(/\\([{}])/g, "\\\\$1");
 
   return fixed;
+};
+
+const normalizeCommonJsonIssues = (jsonString: string): string => {
+  let normalized = fixJsonEscaping(jsonString);
+
+  normalized = normalized.replace(
+    /([\[,\s])(\+?\-?\d+(?:\.\d+)?)(")/g,
+    "$1\"$2$3",
+  );
+
+  normalized = normalized.replace(
+    /([\[,\s])(\+?\-?\d+(?:\.\d+)?)(\s*[\],])/g,
+    "$1\"$2\"$3",
+  );
+
+  normalized = normalized.replace(/\\(?![\\"/bfnrtu])/g, "\\\\");
+
+  return normalized;
 };
 
 const cleanJsonOutput = (rawOutput: string): string => {
@@ -41,43 +55,201 @@ const cleanJsonOutput = (rawOutput: string): string => {
   return cleaned.trim();
 };
 
+const superscriptSubscriptMap: Record<string, string> = {
+  "⁰": "0",
+  "¹": "1",
+  "²": "2",
+  "³": "3",
+  "⁴": "4",
+  "⁵": "5",
+  "⁶": "6",
+  "⁷": "7",
+  "⁸": "8",
+  "⁹": "9",
+  "₀": "0",
+  "₁": "1",
+  "₂": "2",
+  "₃": "3",
+  "₄": "4",
+  "₅": "5",
+  "₆": "6",
+  "₇": "7",
+  "₈": "8",
+  "₉": "9",
+  "½": "1/2",
+  "¼": "1/4",
+  "¾": "3/4",
+};
+
+const symbolMap: Record<string, string> = {
+  "→": "->",
+  "←": "<-",
+  "↔": "<->",
+  "↑": "up",
+  "↓": "down",
+  "∫": "int",
+  "∂": "d",
+  "√": "sqrt",
+  "∑": "sum",
+  "∞": "inf",
+  "±": "+/-",
+  "≈": "~",
+  "≠": "!=",
+  "≤": "<=",
+  "≥": ">=",
+  "⋅": "*",
+  "π": "pi",
+  "α": "alpha",
+  "β": "beta",
+  "γ": "gamma",
+  "δ": "delta",
+  "θ": "theta",
+  "λ": "lambda",
+  "μ": "mu",
+  "σ": "sigma",
+  "ω": "omega",
+};
+
+const normalizeStemText = (str: string): string => {
+  return str
+    .replace(/\\[a-zA-Z]+?\([^)]*?\)/g, (match) =>
+      match.replace(/\\./g, "_"),
+    )
+    .replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹₀₁₂₃₄₅₆₇₈₉½¼¾]/g, (char) =>
+      superscriptSubscriptMap[char] || char,
+    )
+    .replace(/[→←↔↑↓∫∂√∑∞±≈≠≤≥⋅παβγδθλμσω]/g, (char) =>
+      symbolMap[char] || char,
+    );
+};
+
 const parseJsonSafely = (jsonString: string): any => {
+  const normalized = normalizeStemText(jsonString)
+    .replace(/\\(?![\\"/bfnrtu])/g, "\\\\")
+    .replace(/([{,]\s*)([a-zA-Z_$][a-zA-Z0-9_$]*?)\s*:/g, '$1"$2":')
+    .replace(/,\s*([\]}])/g, "$1")
+    .trim();
+
   try {
-    return JSON.parse(jsonString);
+    return JSON.parse(normalized);
   } catch (error: any) {
-    try {
-      const fixed = fixJsonEscaping(jsonString);
-      return JSON.parse(fixed);
-    } catch (secondError) {
+    const arrayMatch = normalized.match(/\[[\s\S]*\]/);
+    if (arrayMatch) {
       try {
-        let aggressiveFix = jsonString;
+        return JSON.parse(arrayMatch[0]);
+      } catch {
+      }
+    }
 
-        aggressiveFix = aggressiveFix.replace(/\\\(/g, "\\\\(");
-        aggressiveFix = aggressiveFix.replace(/\\\)/g, "\\\\)");
-        aggressiveFix = aggressiveFix.replace(/\\\[/g, "\\\\[");
-        aggressiveFix = aggressiveFix.replace(/\\\]/g, "\\\\]");
-        aggressiveFix = aggressiveFix.replace(/\\\{/g, "\\\\{");
-        aggressiveFix = aggressiveFix.replace(/\\\}/g, "\\\\}");
-        aggressiveFix = aggressiveFix.replace(/\\(?![\\"/bfnrtu])/g, "\\\\");
+    const objectLines = normalized
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.startsWith("{") && line.endsWith("}"));
 
-        return JSON.parse(aggressiveFix);
-      } catch (thirdError) {
-        if (error.message && error.message.includes("position")) {
-          const match = error.message.match(/position (\d+)/);
-          if (match) {
-            const pos = parseInt(match[1]);
-            const start = Math.max(0, pos - 50);
-            const end = Math.min(jsonString.length, pos + 50);
-            console.error(
-              `JSON error at position ${pos}:`,
-              jsonString.substring(start, end),
-            );
-          }
+    const validObjects = objectLines
+      .map((line) => {
+        try {
+          return JSON.parse(line);
+        } catch {
+          return null;
         }
-        throw error;
+      })
+      .filter(Boolean);
+
+    if (validObjects.length > 0) {
+      return validObjects;
+    }
+
+    if (error.message && error.message.includes("position")) {
+      const match = error.message.match(/position (\d+)/);
+      if (match) {
+        const pos = parseInt(match[1]);
+        const start = Math.max(0, pos - 50);
+        const end = Math.min(jsonString.length, pos + 50);
+        console.error(
+          `JSON error at position ${pos}:`,
+          jsonString.substring(start, end),
+        );
+      }
+    }
+
+    throw error;
+  }
+};
+
+const extractJsonArrayCandidate = (content: string): string => {
+  const match = content.match(/\[[\s\S]*\]/);
+  return match ? match[0] : content;
+};
+
+const extractJsonObjectsFromArray = (jsonString: string): string[] => {
+  const objects: string[] = [];
+  let depth = 0;
+  let startIndex = -1;
+  let inString = false;
+  let escaped = false;
+
+  for (let index = 0; index < jsonString.length; index++) {
+    const char = jsonString[index];
+
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === "\\") {
+        escaped = true;
+      } else if (char === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+      continue;
+    }
+
+    if (char === "{") {
+      if (depth === 0) {
+        startIndex = index;
+      }
+      depth++;
+      continue;
+    }
+
+    if (char === "}") {
+      depth--;
+      if (depth === 0 && startIndex !== -1) {
+        objects.push(jsonString.slice(startIndex, index + 1));
+        startIndex = -1;
       }
     }
   }
+
+  return objects;
+};
+
+const recoverQuestionsFromMalformedArray = (jsonString: string): any[] => {
+  const objectSnippets = extractJsonObjectsFromArray(jsonString);
+  const recoveredQuestions: any[] = [];
+
+  for (const objectSnippet of objectSnippets) {
+    try {
+      const parsed = parseJsonSafely(objectSnippet);
+      if (
+        parsed &&
+        typeof parsed === "object" &&
+        typeof parsed.questionsText === "string" &&
+        Array.isArray(parsed.Options) &&
+        typeof parsed.correctOption === "string"
+      ) {
+        recoveredQuestions.push(parsed);
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return recoveredQuestions;
 };
 
 const generateBatchFromSubject = async (
@@ -100,8 +272,12 @@ Generate ${numQuestions} multiple-choice questions for the subject: ${subjectNam
 
 LANGUAGE REQUIREMENT (CRITICAL - MUST FOLLOW STRICTLY):
 - By default, ALL questions, options, and answers MUST be written entirely in ENGLISH.
-- EXCEPTION: If the subject name "${subjectName}" explicitly indicates this is a FOREIGN LANGUAGE or REGIONAL LANGUAGE subject (e.g., contains words like "Urdu", "Hindi", "French", "Spanish", "German", "Arabic", "Sanskrit", etc.), ONLY THEN must you write the questions entirely in that specific language.
-- DO NOT mix languages, and DO NOT output in Hindi, Spanish, or any other language UNLESS the subject name specifically demands it. Make absolutely sure the default is English!
+- CRITICAL EXCEPTION: If the subject name "${subjectName}" is a LANGUAGE subject (any language - regional, foreign, or classical), you MUST write the ENTIRE question, ALL options, and ALL text IN THAT LANGUAGE.
+- This means: If the subject is Hindi, write in Hindi (हिंदी में लिखें). If it's Urdu, write in Urdu (اردو میں لکھیں). If it's French, write in French. And so on for ANY language.
+- DO NOT write questions ABOUT the language in English - write questions IN that language with native script/alphabet.
+- For language subjects: questionsText must be in that language, all Options must be in that language, everything in that language's native script.
+- For non-language subjects (like Science, Math, History, etc.): Always use English.
+- DO NOT mix languages within a single question.
 
 ENTRANCE EXAM QUESTION STANDARDS FOR ${entranceExamName}:
 - Questions must test DEEP CONCEPTUAL UNDERSTANDING, not just rote memorization
@@ -113,6 +289,16 @@ ENTRANCE EXAM QUESTION STANDARDS FOR ${entranceExamName}:
 - Include questions that require multi-step reasoning, critical thinking, and problem-solving
 - Questions should match the complexity and style of actual ${entranceExamName} exam questions
 - Ensure questions are aligned with the ${entranceExamName} syllabus and exam pattern
+
+UNIQUENESS AND VARIETY REQUIREMENTS (CRITICAL):
+- Generate UNIQUE and DIFFERENT questions - avoid repetitive patterns or similar concepts
+- Ensure MAXIMUM VARIETY in topics, question types, and approaches within this batch
+- Do NOT repeat similar question structures, calculations, or concepts
+- Cover DIFFERENT aspects and subtopics of the subject matter
+- Avoid generating questions that test the same knowledge point multiple times
+- Each question should be DISTINCTLY different in its focus and approach
+- Vary question formats: conceptual, analytical, calculation-based, application-based, etc.
+- If generating multiple questions, ensure they complement each other rather than overlap
 
 QUESTION QUALITY REQUIREMENTS:
 1. Question text must be clear, concise, grammatically correct, and professionally written
@@ -169,54 +355,89 @@ IMPORTANT:
 - CRITICAL MATH ESCAPING: For LaTeX or math notation, NEVER use a single backslash like "\\( " or "\\[". You MUST use DOUBLE backslashes: "\\\\" (e.g., "\\\\( x^2 \\\\)" or "\\\\[ \\\\frac{1}{2} \\\\]"). Single backslashes will cause the JSON parser to crash immediately.
 - Ensure questions are suitable for competitive entrance exam preparation
 - FINAL CHECK: Before returning the JSON, verify EVERY correctOption is factually correct - do not guess or assume
+ - OUTPUT ONLY VALID JSON. Escape all backslashes (\\\\), quotes (\\"), and newlines (\\n).
+ - Use simple plain text only: NO LaTeX, NO unicode subscripts/superscripts/symbols.
+ - Example: use "sulfate ion SO4 2-" instead of formatted chemistry symbols.
+ - NEVER add markdown, explanations, or code blocks.
 
 Return ONLY the JSON array. No markdown code blocks, no explanations, no additional commentary.
 `;
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      const response = await client.responses.create({
+        model: OPENAI_MODEL_MINI,
+        input: [
+          {
+            role: "user",
+            content: [{ type: "input_text", text: prompt }],
+          },
+        ],
+        temperature: 0.1,
+        max_output_tokens: 6000,
+      });
 
-    const response = await client.responses.create({
-      model: process.env.OPENAI_MODEL_MINI || "gpt-4o-mini",
-      input: [
-        {
-          role: "user",
-          content: [{ type: "input_text", text: prompt }],
-        },
-      ],
-      temperature: 0.8, // Higher temperature for more variety
-    });
+      content = response.output_text || "[]";
 
-    content = response.output_text || "[]";
-    console.log("=== ACTUAL OPENAI RESPONSE (NON-PDF ROUTE) ===", content);
+      if (response) {
+        const usage: any = response.usage || {};
+        const promptTokens = usage.input_tokens || usage.prompt_tokens || 0;
+        const completionTokens =
+          usage.output_tokens || usage.completion_tokens || 0;
+        const totalTokens =
+          usage.total_tokens || promptTokens + completionTokens;
+        const cost =
+          (promptTokens / 1000000) * 0.15 + (completionTokens / 1000000) * 0.6;
 
-    if (response) {
-      const usage: any = response.usage || {};
-      const promptTokens = usage.input_tokens || usage.prompt_tokens || 0;
-      const completionTokens =
-        usage.output_tokens || usage.completion_tokens || 0;
-      const totalTokens = usage.total_tokens || promptTokens + completionTokens;
-      // gpt-4o-mini costs: $0.15 / 1M input, $0.60 / 1M output
-      const cost =
-        (promptTokens / 1000000) * 0.15 + (completionTokens / 1000000) * 0.6;
+        console.log(
+          `\n📊 TOKEN USAGE (Batch ${batchNumber || 1} - gpt-4o-mini):`,
+        );
+        console.log(`   - Input/Prompt Tokens: ${promptTokens}`);
+        console.log(`   - Output/Completion Tokens: ${completionTokens}`);
+        console.log(`   - Total Tokens: ${totalTokens}`);
+        console.log(`   - Estimated Cost: $${cost.toFixed(6)}\n`);
+      }
+
+      const cleanedContent = extractJsonArrayCandidate(cleanJsonOutput(content));
+
+      let questions: any[] = [];
+      try {
+        const parsedQuestions = parseJsonSafely(cleanedContent);
+        questions = Array.isArray(parsedQuestions) ? parsedQuestions : [];
+      } catch (parseError: any) {
+        questions = recoverQuestionsFromMalformedArray(cleanedContent);
+        if (questions.length === 0) {
+          console.warn(
+            `Retry ${attempt + 1}/${MAX_RETRIES} for batch ${
+              batchNumber || 1
+            } due to parse issue: ${parseError?.message || "unknown parse error"}`,
+          );
+
+          if (attempt < MAX_RETRIES - 1) {
+            await new Promise((resolve) =>
+              setTimeout(resolve, 1000 * (attempt + 1)),
+            );
+            continue;
+          }
+
+          throw parseError;
+        }
+
+        console.warn(
+          `Recovered ${questions.length} valid questions from malformed batch ${
+            batchNumber || 1
+          } output`,
+        );
+      }
 
       console.log(
-        `\n📊 TOKEN USAGE (NON-PDF Route/Batch ${batchNumber || 1} - gpt-4o-mini):`,
+        `Batch ${batchNumber || 1}: Generated ${
+          questions.length
+        } questions from subject knowledge (${subjectName})`,
       );
-      console.log(`   - Input/Prompt Tokens: ${promptTokens}`);
-      console.log(`   - Output/Completion Tokens: ${completionTokens}`);
-      console.log(`   - Total Tokens: ${totalTokens}`);
-      console.log(`   - Estimated Cost: $${cost.toFixed(6)}\n`);
+
+      return Array.isArray(questions) ? questions : [];
     }
 
-    // Clean and parse with robust error handling
-    const cleanedContent = cleanJsonOutput(content);
-    const questions = parseJsonSafely(cleanedContent);
-
-    console.log(
-      `Batch ${batchNumber || 1}: Generated ${
-        questions.length
-      } questions from subject knowledge (${subjectName})`,
-    );
-
-    return Array.isArray(questions) ? questions : [];
+    return [];
   } catch (error) {
     console.error(`Error generating batch ${batchNumber || 1}:`, error);
     console.log("Raw output (first 500 chars):", content?.substring(0, 500));
@@ -230,8 +451,8 @@ export const GenerateQuestionsFromSubjectKnowledge = async (
   numQuestions: number = 10,
   topic?: string,
 ): Promise<any[]> => {
-  // If requesting 10 or fewer questions, do single batch
-  if (numQuestions <= BATCH_SIZE) {
+  // If requesting fewer questions than batch size, do single batch
+  if (numQuestions <= BATCH_SIZE_QUESTIONS) {
     return await generateBatchFromSubject(
       subjectName,
       entranceExamName,
@@ -241,38 +462,74 @@ export const GenerateQuestionsFromSubjectKnowledge = async (
     );
   }
 
-  // Generate in batches for larger requests
-  const allQuestions: any[] = [];
-  const totalBatches = Math.ceil(numQuestions / BATCH_SIZE);
-
+  // Calculate batches for parallel processing
+  const currentBatchSize = BATCH_SIZE_QUESTIONS;
+  const totalBatches = Math.ceil(numQuestions / currentBatchSize);
+  const totalWaves = Math.ceil(totalBatches / MAX_BATCHES);
+  
   console.log(
-    `Generating ${numQuestions} questions in ${totalBatches} batches of ${BATCH_SIZE} (${subjectName} - ${entranceExamName})`,
+    `Generating ${numQuestions} questions in ${totalBatches} batches (${currentBatchSize} questions/batch) across ${totalWaves} wave(s) (max ${MAX_BATCHES} parallel batches per wave) - ${subjectName} (${entranceExamName})`,
   );
+  
+  const allQuestions: any[] = [];
+  
+  // Process batches in waves (max MAX_BATCHES parallel at a time)
+  for (let wave = 0; wave < totalWaves; wave++) {
+    const startBatch = wave * MAX_BATCHES;
+    const endBatch = Math.min(startBatch + MAX_BATCHES, totalBatches);
+    const batchesInWave = endBatch - startBatch;
+    
+    console.log(`\n🌊 Wave ${wave + 1}/${totalWaves}: Running batches ${startBatch + 1}-${endBatch} in parallel...`);
+    
+    const batchPromises: Promise<{batchNumber: number, questions: any[]}>[] = [];
+    
+    // Create batch promises for this wave
+    for (let i = startBatch; i < endBatch; i++) {
+      const questionsProcessed = i * currentBatchSize;
+      const remainingQuestions = numQuestions - questionsProcessed;
+      const actualBatchSize = Math.min(currentBatchSize, remainingQuestions);
+      const currentBatchNumber = i + 1;
 
-  for (let i = 0; i < totalBatches; i++) {
-    const remainingQuestions = numQuestions - allQuestions.length;
-    const batchSize = Math.min(BATCH_SIZE, remainingQuestions);
-    const batchNumber = i + 1;
+      const batchPromise = generateBatchFromSubject(
+        subjectName,
+        entranceExamName,
+        actualBatchSize,
+        topic,
+        currentBatchNumber,
+      ).then((questions) => ({
+        batchNumber: currentBatchNumber,
+        questions: questions || []
+      })).catch((error) => {
+        console.error(`Batch ${currentBatchNumber} failed:`, error);
+        return {
+          batchNumber: currentBatchNumber,
+          questions: []
+        };
+      });
 
-    const batchQuestions = await generateBatchFromSubject(
-      subjectName,
-      entranceExamName,
-      batchSize,
-      topic,
-      batchNumber,
-    );
-
-    if (batchQuestions && batchQuestions.length > 0) {
-      allQuestions.push(...batchQuestions);
-      console.log(
-        `Progress: ${allQuestions.length}/${numQuestions} questions generated`,
-      );
+      batchPromises.push(batchPromise);
     }
 
-    // Delay between batches (except for last batch)
-    if (batchNumber < totalBatches) {
-      await new Promise((resolve) => setTimeout(resolve, BATCH_DELAY));
+    // Wait for all batches in this wave to complete
+    const batchResults = await Promise.allSettled(batchPromises);
+
+    // Process results from this wave
+    for (const result of batchResults) {
+      if (result.status === 'fulfilled' && result.value.questions.length > 0) {
+        const { batchNumber, questions } = result.value;
+        
+        allQuestions.push(...questions);
+        console.log(
+          `Batch ${batchNumber} completed: ${questions.length} questions added (Total: ${allQuestions.length}/${numQuestions})`,
+        );
+      } else if (result.status === 'rejected') {
+        console.error('Batch promise was rejected:', result.reason);
+      } else if (result.status === 'fulfilled' && result.value.questions.length === 0) {
+        console.warn(`Batch ${result.value.batchNumber} returned no questions`);
+      }
     }
+    
+    console.log(`✅ Wave ${wave + 1} complete: ${allQuestions.length}/${numQuestions} questions generated so far`);
   }
 
   console.log(

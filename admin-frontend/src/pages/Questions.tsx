@@ -45,6 +45,8 @@ export default function Questions() {
     type: "success" | "error" | null;
     message: string;
   }>({ type: null, message: "" });
+  const [activeJobId, setActiveJobId] = useState<string | null>(null);
+  const [isJobRunning, setIsJobRunning] = useState(false);
 
   // My Questions tab state
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -57,6 +59,36 @@ export default function Questions() {
   // Filter state for "My Questions" tab
   const [filterEntranceExamId, setFilterEntranceExamId] = useState<string>("");
   const [filterSubjectId, setFilterSubjectId] = useState<string>("");
+
+  const checkActiveJob = useCallback(async () => {
+    try {
+      const response = await axiosInstance.get(
+        "/admin/jobs/active?type=question-generation",
+      );
+      const jobs = (response.data?.jobs || []) as Array<{
+        externalJobId?: string;
+        status?: string;
+      }>;
+
+      if (!jobs.length) {
+        setActiveJobId(null);
+        setIsJobRunning(false);
+        return;
+      }
+
+      const job = jobs[0];
+      const nextJobId = job.externalJobId || null;
+      const runningStatuses = ["queued", "running", "partial"];
+      const isRunning = !!job.status && runningStatuses.includes(job.status);
+
+      setActiveJobId(isRunning ? nextJobId : null);
+      setIsJobRunning(isRunning && !!nextJobId);
+    } catch (error) {
+      console.error("Failed to check active jobs:", error);
+      setActiveJobId(null);
+      setIsJobRunning(false);
+    }
+  }, []);
 
   // Fetch entrance exams on component mount
   useEffect(() => {
@@ -78,6 +110,46 @@ export default function Questions() {
 
     fetchExams();
   }, []);
+
+  useEffect(() => {
+    checkActiveJob();
+  }, [checkActiveJob]);
+
+  useEffect(() => {
+    if (!activeJobId) {
+      return;
+    }
+
+    const runningStatuses = ["queued", "running", "partial"];
+
+    const pollJobStatus = async () => {
+      try {
+        const response = await axiosInstance.get(
+          `/admin/jobs/${activeJobId}/status`,
+        );
+        const job = response.data?.job as { status?: string } | undefined;
+
+        if (!job?.status || !runningStatuses.includes(job.status)) {
+          setActiveJobId(null);
+          setIsJobRunning(false);
+          return;
+        }
+
+        setIsJobRunning(true);
+      } catch (error) {
+        console.error("Failed to poll job status:", error);
+        setActiveJobId(null);
+        setIsJobRunning(false);
+      }
+    };
+
+    pollJobStatus();
+    const intervalId = window.setInterval(pollJobStatus, 10000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [activeJobId, activeTab]);
 
   // Update filtered subjects when exam selection changes
   useEffect(() => {
@@ -254,14 +326,15 @@ export default function Questions() {
           numQuestions: numQuestions > 0 ? numQuestions : undefined,
         });
 
-        let successMessage = "Questions generated from PDF successfully!";
-        if (tagResponse.data.questionsGenerated) {
-          successMessage += ` ${tagResponse.data.questionsGenerated} questions created.`;
+        const queuedJobId = tagResponse.data?.jobId;
+        if (queuedJobId) {
+          setActiveJobId(String(queuedJobId));
+          setIsJobRunning(true);
         }
 
         setStatus({
           type: "success",
-          message: successMessage,
+          message: "Question generation queued successfully.",
         });
       } else {
         // Generate questions directly without PDF
@@ -272,11 +345,15 @@ export default function Questions() {
           numQuestions: numQuestions > 0 ? numQuestions : 50,
         });
 
+        const queuedJobId = response.data?.jobId;
+        if (queuedJobId) {
+          setActiveJobId(String(queuedJobId));
+          setIsJobRunning(true);
+        }
+
         setStatus({
           type: "success",
-          message: `${
-            response.data.questionsGenerated || numQuestions
-          } questions generated successfully!`,
+          message: "Question generation queued successfully.",
         });
       }
 
@@ -441,8 +518,11 @@ export default function Questions() {
                     setNumQuestions(parseInt(e.target.value) || 50)
                   }
                 />
+                {/* <p className="text-xs text-muted-foreground">
+                  Default: 50 questions 
+                </p> */}
                 <p className="text-xs text-muted-foreground">
-                  Default: 50 questions (max: 100)
+                  Approx time reference: 500 questions can take around 2 minutes.
                 </p>
               </div>
 
@@ -457,6 +537,12 @@ export default function Questions() {
                 >
                   {status.message}
                 </div>
+              )}
+
+              {isJobRunning && (
+                <p className="text-sm text-muted-foreground">
+                  Questions are Being generated right now in background come back after few minutes or hours...
+                </p>
               )}
 
               {/* Generate Button */}
@@ -501,7 +587,7 @@ export default function Questions() {
               )}
 
               {/* Scrollable Questions List Container */}
-              <div className="max-h-[800px] overflow-y-auto pr-2 border rounded-md p-4 bg-muted/20">
+              <div className="max-h-200 overflow-y-auto pr-2 border rounded-md p-4 bg-muted/20">
                 <QuestionsList
                   questions={questions}
                   loading={loadingQuestions}

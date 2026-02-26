@@ -1,6 +1,5 @@
 import compression from "compression";
 import cookieParser from "cookie-parser";
-import dotenv from "dotenv";
 import express, { Request, Response } from "express";
 import helmet from "helmet";
 import cors from "cors";
@@ -14,29 +13,22 @@ import { TestRouter } from "./routes/test.routes";
 import { UploadPdfRouter } from "./routes/uploadPdf.routes";
 import { UserRouter } from "./routes/user.routes";
 import { UIFlagsRouter } from "./routes/uiFlags.routes";
+import { JobRouter } from "./routes/job.routes";
+import { NODE_ENV, PORT, productionOrigins } from "./env";
+import { startQuestionWorker, stopQuestionWorker } from "./workers/questionWorker";
 
 const app = express();
-
-dotenv.config();
-
-ConnectToDb();
-
-const PORT = process.env.PORT || "8080";
-
-const productionOrigins = process.env.FRONTEND_URL
-  ? process.env.FRONTEND_URL.split(",").map((url) => url.trim())
-  : [];
 
 app.use(
   cors({
     credentials: true,
     origin:
-      process.env.NODE_ENV === "production"
+      NODE_ENV === "production"
         ? productionOrigins
         : ["http://localhost:5173", "http://localhost:5174"],
     methods: ["GET", "POST", "PUT", "DELETE"],
     allowedHeaders: ["Content-Type", "Authorization"],
-  })
+  }),
 );
 
 app.use(express.json());
@@ -59,7 +51,30 @@ app.use("/api/v1/entrance-exam", EntranceExamRouter);
 app.use("/api/v1/upload", UploadPdfRouter);
 app.use("/api/v1/dev", DevRouter);
 app.use("/api/v1/ui-flags", UIFlagsRouter);
+app.use("/api/v1/jobs", JobRouter);
 
-app.listen(PORT, () => {
-  console.log(`Server in running on port ${PORT}`);
+const bootstrap = async () => {
+  await ConnectToDb();
+
+  await startQuestionWorker();
+  console.log("[boot] worker started");
+
+  const server = app.listen(PORT, () => {
+    console.log(`[boot] server listening on ${PORT}`);
+  });
+
+  const shutdown = async () => {
+    await stopQuestionWorker();
+    server.close(() => {
+      process.exit(0);
+    });
+  };
+
+  process.on("SIGINT", shutdown);
+  process.on("SIGTERM", shutdown);
+};
+
+bootstrap().catch((error) => {
+  console.error("Failed to bootstrap server:", error);
+  process.exit(1);
 });

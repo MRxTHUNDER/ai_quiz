@@ -13,6 +13,7 @@ import {
   getUserProfileProgress,
   getUserProfileStats,
 } from "../service/userProfile.service";
+import { COOKIE_DOMAIN, NODE_ENV } from "../env";
 
 export const Signup = async (req: Request, res: Response) => {
   const { success, error, data } = signupBody.safeParse(req.body);
@@ -67,10 +68,10 @@ export const Signup = async (req: Request, res: Response) => {
     res.cookie("userToken", token, {
       httpOnly: true,
       sameSite: "strict",
-      secure: process.env.NODE_ENV === "production",
+      secure: NODE_ENV === "production",
       domain:
-        process.env.NODE_ENV === "production"
-          ? process.env.COOKIE_DOMAIN
+        NODE_ENV === "production"
+          ? COOKIE_DOMAIN
           : undefined,
     });
 
@@ -139,10 +140,10 @@ export const Signin = async (req: Request, res: Response) => {
     res.cookie("userToken", token, {
       httpOnly: true,
       sameSite: "strict",
-      secure: process.env.NODE_ENV === "production",
+      secure: NODE_ENV === "production",
       domain:
-        process.env.NODE_ENV === "production"
-          ? process.env.COOKIE_DOMAIN
+        NODE_ENV === "production"
+          ? COOKIE_DOMAIN
           : undefined,
     });
 

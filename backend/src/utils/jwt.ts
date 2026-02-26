@@ -1,7 +1,6 @@
 import jwt from "jsonwebtoken";
+import { ADMIN_JWT_SECRET, USER_JWT_SECRET } from "../env";
 
-const USER_JWT_SECRET = process.env.USER_JWT_SECRET || "user_secret_key";
-const ADMIN_JWT_SECRET = process.env.ADMIN_JWT_SECRET || "admin_secret_key";
 
 interface TokenPayload {
   userId: string;

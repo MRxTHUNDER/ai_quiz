@@ -14,6 +14,7 @@ import {
   getUserProgressForAdmin,
   getPlatformStatistics,
 } from "../service/adminManagement.service";
+import { ADMIN_PASSWORD, COOKIE_DOMAIN, NODE_ENV } from "../env";
 
 export const AdminSignup = async (req: Request, res: Response) => {
   const { success, error, data } = adminSignupBody.safeParse(req.body);
@@ -26,15 +27,14 @@ export const AdminSignup = async (req: Request, res: Response) => {
     return;
   }
 
-  const adminPassword = process.env.ADMIN_PASSWORD;
-  if (!adminPassword) {
+  if (!ADMIN_PASSWORD) {
     res.status(500).json({
       message: "Admin password not configured",
     });
     return;
   }
 
-  if (data.adminPassword !== adminPassword) {
+  if (data.adminPassword !==  ADMIN_PASSWORD) {
     res.status(403).json({
       message: "Invalid admin password",
     });
@@ -74,11 +74,11 @@ export const AdminSignup = async (req: Request, res: Response) => {
 
     res.cookie("adminToken", token, {
       httpOnly: true,
-      sameSite: process.env.NODE_ENV === "production" ? "strict" : "lax",
-      secure: process.env.NODE_ENV === "production",
+      sameSite: NODE_ENV === "production" ? "strict" : "lax",
+      secure: NODE_ENV === "production",
       domain:
-        process.env.NODE_ENV === "production"
-          ? process.env.COOKIE_DOMAIN
+        NODE_ENV === "production"
+          ? COOKIE_DOMAIN 
           : undefined,
     });
 
@@ -111,15 +111,14 @@ export const AdminSignin = async (req: Request, res: Response) => {
     return;
   }
 
-  const adminPassword = process.env.ADMIN_PASSWORD;
-  if (!adminPassword) {
+  if (!ADMIN_PASSWORD) {
     res.status(500).json({
       message: "Admin password not configured",
     });
     return;
   }
 
-  if (data.adminPassword !== adminPassword) {
+  if (data.adminPassword !== ADMIN_PASSWORD) {
     res.status(403).json({
       message: "Invalid admin password",
     });
@@ -163,11 +162,11 @@ export const AdminSignin = async (req: Request, res: Response) => {
 
     res.cookie("adminToken", token, {
       httpOnly: true,
-      sameSite: process.env.NODE_ENV === "production" ? "strict" : "lax",
-      secure: process.env.NODE_ENV === "production",
+      sameSite: NODE_ENV === "production" ? "strict" : "lax",
+      secure: NODE_ENV === "production",
       domain:
-        process.env.NODE_ENV === "production"
-          ? process.env.COOKIE_DOMAIN
+        NODE_ENV === "production"
+          ? COOKIE_DOMAIN 
           : undefined,
     });
 

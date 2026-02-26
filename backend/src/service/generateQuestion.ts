@@ -1,49 +1,21 @@
-import OpenAI from "openai";
-import dotenv from "dotenv";
 import { QuestionModel } from "../models/questions.model";
 
-dotenv.config();
-
-const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
 import stringSimilarity from "string-similarity";
-
-const BATCH_SIZE = process.env.QUESTION_BATCH_SIZE
-  ? Number(process.env.QUESTION_BATCH_SIZE)
-  : 10;
+import {
+  BATCH_SIZE,
+  client,
+  numQuestionsEnv,
+  OPENAI_MODEL,
+  OPENAI_MODEL_MINI,
+  SIMILARITY_THRESHOLD,
+} from "../env";
 
 const MAX_RETRIES = 3;
 
+const BATCH_SIZE_QUESTIONS = 50; // Questions per batch
+const MAX_BATCHES = 10; // Maximum number of parallel batches
+
 const BATCH_DELAY = 2000; // 2 seconds
-
-// Set string-similarity threshold
-const SIMILARITY_THRESHOLD = Number(
-  process.env.DUPLICATE_SIMILARITY_THRESHOLD || 0.85,
-);
-
-/**
- * Calculate cosine similarity between two vectors
- */
-const cosineSimilarity = (vec1: number[], vec2: number[]): number => {
-  if (vec1.length !== vec2.length || vec1.length === 0) return 0;
-
-  let dotProduct = 0;
-  let mag1 = 0;
-  let mag2 = 0;
-
-  for (let i = 0; i < vec1.length; i++) {
-    dotProduct += vec1[i] * vec2[i];
-    mag1 += vec1[i] * vec1[i];
-    mag2 += vec2[i] * vec2[i];
-  }
-
-  mag1 = Math.sqrt(mag1);
-  mag2 = Math.sqrt(mag2);
-
-  if (mag1 === 0 || mag2 === 0) return 0;
-
-  return dotProduct / (mag1 * mag2);
-};
 
 /**
  * Extract topics/keywords from question text
@@ -327,6 +299,7 @@ const generateBatch = async (
   totalBatches?: number,
   retryCount: number = 0,
   isUsingSummary: boolean = false,
+  modelOverride?: string,
 ): Promise<any[]> => {
   const batchInfo =
     batchNumber && totalBatches
@@ -357,10 +330,24 @@ COMPETITIVE ENTRANCE EXAM QUESTION STANDARDS:
 - Include questions that require multi-step reasoning, critical thinking, and problem-solving
 - Questions must match the complexity and rigor of actual competitive entrance exam questions
 
+UNIQUENESS AND VARIETY REQUIREMENTS (CRITICAL):
+- Generate UNIQUE and DIFFERENT questions - avoid repetitive patterns or similar concepts
+- Ensure MAXIMUM VARIETY in topics, question types, and approaches within this batch
+- Do NOT repeat similar question structures, calculations, or concepts
+- Cover DIFFERENT aspects and subtopics of the subject matter
+- Avoid generating questions that test the same knowledge point multiple times
+- Each question should be DISTINCTLY different in its focus and approach
+- Vary question formats: conceptual, analytical, calculation-based, application-based, etc.
+- If generating multiple questions, ensure they complement each other rather than overlap
+
 LANGUAGE REQUIREMENT (CRITICAL - MUST FOLLOW STRICTLY):
 - By default, ALL questions, options, and answers MUST be written entirely in ENGLISH.
-- EXCEPTION: If the subject name indicates this is a FOREIGN LANGUAGE or REGIONAL LANGUAGE subject (e.g., contains words like "Urdu", "Hindi", "French", "Spanish", "German", "Arabic", "Sanskrit", etc.), ONLY THEN must you write the questions entirely in that specific language.
-- DO NOT mix languages, and DO NOT output in Hindi, Spanish, or any other language UNLESS the subject name specifically demands it. Make absolutely sure the default is English!
+- CRITICAL EXCEPTION: If this is a LANGUAGE subject (any language - regional, foreign, or classical), you MUST write the ENTIRE question, ALL options, and ALL text IN THAT LANGUAGE.
+- This means: If the subject is Hindi, write in Hindi (हिंदी में लिखें). If it's Urdu, write in Urdu (اردو میں لکھیں). If it's French, write in French. And so on for ANY language.
+- DO NOT write questions ABOUT the language in English - write questions IN that language with native script/alphabet.
+- For language subjects: questionsText must be in that language, all Options must be in that language, everything in that language's native script.
+- For non-language subjects (like Science, Math, History, etc.): Always use English.
+- DO NOT mix languages within a single question.
 
 QUESTION QUALITY REQUIREMENTS:
 1. Question text must be clear, concise, and grammatically correct
@@ -422,16 +409,19 @@ Return ONLY the JSON array. Do not include markdown code blocks, explanations, o
 `;
 
   try {
+    const modelToUse = modelOverride || OPENAI_MODEL;
+
     // Use responses API for all cases (works reliably)
     const response = await client.responses.create({
-      model: process.env.OPENAI_MODEL || "gpt-4o",
+      model: modelToUse,
       input: [
         {
           role: "user",
           content: [{ type: "input_text", text: prompt }],
         },
       ],
-      temperature: 0.7,
+      temperature: isUsingSummary ? 0.7 : 0.1,
+      max_output_tokens: isUsingSummary ? undefined : 6000,
     });
 
     if (response) {
@@ -445,7 +435,7 @@ Return ONLY the JSON array. Do not include markdown code blocks, explanations, o
         (promptTokens / 1000000) * 2.5 + (completionTokens / 1000000) * 10.0;
 
       console.log(
-        `\n📊 TOKEN USAGE (PDF Route/Batch ${batchNumber || 1} - gpt-4o):`,
+        `\n📊 TOKEN USAGE (Batch ${batchNumber || 1} - ${modelToUse}):`,
       );
       console.log(`   - Input/Prompt Tokens: ${promptTokens}`);
       console.log(`   - Output/Completion Tokens: ${completionTokens}`);
@@ -454,7 +444,8 @@ Return ONLY the JSON array. Do not include markdown code blocks, explanations, o
     }
 
     const rawOutput = response.output_text || "[]";
-    console.log("=== ACTUAL OPENAI RESPONSE (PDF ROUTE/BATCH) ===", rawOutput);
+    if (isUsingSummary) {
+    }
 
     try {
       const cleanedOutput = cleanJsonOutput(rawOutput);
@@ -498,6 +489,7 @@ Return ONLY the JSON array. Do not include markdown code blocks, explanations, o
           totalBatches,
           retryCount + 1,
           isUsingSummary,
+          modelOverride,
         );
       } else {
         console.error(
@@ -525,6 +517,7 @@ Return ONLY the JSON array. Do not include markdown code blocks, explanations, o
         totalBatches,
         retryCount + 1,
         isUsingSummary,
+        modelOverride,
       );
     }
 
@@ -538,8 +531,9 @@ export const GenerateAIQuestions = async (
   numQuestions?: number,
   subjectId?: string,
   isUsingSummary: boolean = false,
+  modelOverride?: string,
 ) => {
-  const numQuestionsEnv = process.env.NUM_QUESTIONS;
+  const modelToUse = modelOverride || OPENAI_MODEL;
   const finalNumQuestions =
     numQuestions || (numQuestionsEnv ? Number(numQuestionsEnv) : 50);
 
@@ -549,8 +543,12 @@ You are an expert COMPETITIVE ENTRANCE EXAM question generator specializing in h
 
 LANGUAGE REQUIREMENT (CRITICAL - MUST FOLLOW STRICTLY):
 - By default, ALL questions, options, and answers MUST be written entirely in ENGLISH.
-- EXCEPTION: If the subject name indicates this is a FOREIGN LANGUAGE or REGIONAL LANGUAGE subject (e.g., contains words like "Urdu", "Hindi", "French", "Spanish", "German", "Arabic", "Sanskrit", etc.), ONLY THEN must you write the questions entirely in that specific language.
-- DO NOT mix languages, and DO NOT output in Hindi, Spanish, or any other language UNLESS the subject name specifically demands it. Make absolutely sure the default is English!
+- CRITICAL EXCEPTION: If this is a LANGUAGE subject (any language - regional, foreign, or classical), you MUST write the ENTIRE question, ALL options, and ALL text IN THAT LANGUAGE.
+- This means: If the subject is Hindi, write in Hindi (हिंदी में लिखें). If it's Urdu, write in Urdu (اردو میں لکھیں). If it's French, write in French. And so on for ANY language.
+- DO NOT write questions ABOUT the language in English - write questions IN that language with native script/alphabet.
+- For language subjects: questionsText must be in that language, all Options must be in that language, everything in that language's native script.
+- For non-language subjects (like Science, Math, History, etc.): Always use English.
+- DO NOT mix languages within a single question.
 
 COMPETITIVE ENTRANCE EXAM QUESTION STANDARDS:
 - Questions must test CONCEPTUAL UNDERSTANDING, not just memorization
@@ -561,6 +559,16 @@ COMPETITIVE ENTRANCE EXAM QUESTION STANDARDS:
 - Avoid trivial, overly simple, or elementary-level questions
 - Include questions that require multi-step reasoning, critical thinking, and problem-solving
 - Questions must match the complexity and rigor of actual competitive entrance exam questions
+
+UNIQUENESS AND VARIETY REQUIREMENTS (CRITICAL):
+- Generate UNIQUE and DIFFERENT questions - avoid repetitive patterns or similar concepts
+- Ensure MAXIMUM VARIETY in topics, question types, and approaches
+- Do NOT repeat similar question structures, calculations, or concepts
+- Cover DIFFERENT aspects and subtopics of the subject matter
+- Avoid generating questions that test the same knowledge point multiple times
+- Each question should be DISTINCTLY different in its focus and approach
+- Vary question formats: conceptual, analytical, calculation-based, application-based, etc.
+- Ensure questions complement each other rather than overlap in content or methodology
 
 QUESTION QUALITY REQUIREMENTS:
 1. Question text must be clear, concise, and grammatically correct
@@ -621,7 +629,7 @@ Return ONLY the JSON array. Do not include markdown code blocks, explanations, o
 `;
 
     const response = await client.responses.create({
-      model: process.env.OPENAI_MODEL || "gpt-4o",
+      model: modelToUse,
       input: [
         {
           role: "user",
@@ -630,7 +638,8 @@ Return ONLY the JSON array. Do not include markdown code blocks, explanations, o
           ],
         },
       ],
-      temperature: 0.7,
+      temperature: isUsingSummary ? 0.7 : 0.1,
+      max_output_tokens: isUsingSummary ? undefined : 6000,
     });
 
     if (response) {
@@ -643,7 +652,7 @@ Return ONLY the JSON array. Do not include markdown code blocks, explanations, o
       const cost =
         (promptTokens / 1000000) * 2.5 + (completionTokens / 1000000) * 10.0;
 
-      console.log(`\n📊 TOKEN USAGE (PDF Route/Single - gpt-4o):`);
+      console.log(`\n📊 TOKEN USAGE (Single Batch - ${modelToUse}):`);
       console.log(`   - Input/Prompt Tokens: ${promptTokens}`);
       console.log(`   - Output/Completion Tokens: ${completionTokens}`);
       console.log(`   - Total Tokens: ${totalTokens}`);
@@ -651,7 +660,8 @@ Return ONLY the JSON array. Do not include markdown code blocks, explanations, o
     }
 
     const rawOutput = response.output_text || "[]";
-    console.log("=== ACTUAL OPENAI RESPONSE (PDF ROUTE/SINGLE) ===", rawOutput);
+    if (isUsingSummary) {
+    }
 
     try {
       // Clean the output to remove markdown code blocks
@@ -666,8 +676,8 @@ Return ONLY the JSON array. Do not include markdown code blocks, explanations, o
     }
   }
 
-  // Batch processing for large question counts
-  if (finalNumQuestions <= BATCH_SIZE) {
+  // Batch processing for all requests (parallel)
+  if (finalNumQuestions <= BATCH_SIZE_QUESTIONS) {
     // Small enough for single batch
     const questions = await generateBatch(
       source,
@@ -677,6 +687,7 @@ Return ONLY the JSON array. Do not include markdown code blocks, explanations, o
       undefined,
       0,
       isUsingSummary,
+      modelOverride,
     );
 
     // Add topics (removed embedding)
@@ -693,134 +704,93 @@ Return ONLY the JSON array. Do not include markdown code blocks, explanations, o
     return questionsWithTopics;
   }
 
-  // Calculate batches with dynamic batch size
-  let currentBatchSize = BATCH_SIZE;
-  const allQuestions: any[] = [];
-  let batchNumber = 1;
-  let consecutiveFailures = 0;
-
+  // Calculate batches
+  const currentBatchSize = BATCH_SIZE_QUESTIONS;
+  const totalBatches = Math.ceil(finalNumQuestions / currentBatchSize);
+  const totalWaves = Math.ceil(totalBatches / MAX_BATCHES);
+  
   console.log(
-    `Generating ${finalNumQuestions} questions in batches (starting with ${currentBatchSize} questions per batch)`,
+    `Generating ${finalNumQuestions} questions in ${totalBatches} batches (${currentBatchSize} questions/batch) across ${totalWaves} wave(s) (max ${MAX_BATCHES} parallel batches per wave)`,
   );
+  
+  const allQuestions: any[] = [];
+  
+  // Process batches in waves (max MAX_BATCHES parallel at a time)
+  for (let wave = 0; wave < totalWaves; wave++) {
+    const startBatch = wave * MAX_BATCHES;
+    const endBatch = Math.min(startBatch + MAX_BATCHES, totalBatches);
+    const batchesInWave = endBatch - startBatch;
+    
+    console.log(`\n🌊 Wave ${wave + 1}/${totalWaves}: Running batches ${startBatch + 1}-${endBatch} in parallel...`);
+    
+    const batchPromises: Promise<{batchNumber: number, questions: any[]}>[] = [];
+    
+    // Create batch promises for this wave
+    for (let i = startBatch; i < endBatch; i++) {
+      const questionsProcessed = i * currentBatchSize;
+      const remainingQuestions = finalNumQuestions - questionsProcessed;
+      const actualBatchSize = Math.min(currentBatchSize, remainingQuestions);
+      const currentBatchNumber = i + 1;
 
-  // Process batches sequentially to avoid rate limits
-  while (allQuestions.length < finalNumQuestions) {
-    const remainingQuestions = finalNumQuestions - allQuestions.length;
-    const actualBatchSize = Math.min(currentBatchSize, remainingQuestions);
-
-    // If we need very few questions, just generate them
-    if (remainingQuestions <= 5) {
-      console.log(
-        `Final batch: generating remaining ${remainingQuestions} questions...`,
-      );
-      let batchQuestions = await generateBatch(
+      const batchPromise = generateBatch(
         source,
-        remainingQuestions,
+        actualBatchSize,
         subjectId,
-        batchNumber,
-        undefined,
+        currentBatchNumber,
+        totalBatches,
         0,
         isUsingSummary,
-      );
+        modelOverride,
+      ).then((questions) => ({
+        batchNumber: currentBatchNumber,
+        questions: questions || []
+      })).catch((error) => {
+        console.error(`Batch ${currentBatchNumber} failed:`, error);
+        return {
+          batchNumber: currentBatchNumber,
+          questions: []
+        };
+      });
 
-      if (batchQuestions && batchQuestions.length > 0) {
-        // Add topics (removed embedding)
-        const questionsWithTopics = batchQuestions.map((q: any) => ({
+      batchPromises.push(batchPromise);
+    }
+
+    // Wait for all batches in this wave to complete
+    const batchResults = await Promise.allSettled(batchPromises);
+
+    // Process results from this wave
+    for (const result of batchResults) {
+      if (result.status === 'fulfilled' && result.value.questions.length > 0) {
+        const { batchNumber, questions } = result.value;
+        
+        // Add topics
+        const questionsWithTopics = questions.map((q: any) => ({
           ...q,
           topics: extractTopics(q),
         }));
 
         // Filter duplicates if subjectId is provided
+        let finalQuestions = questionsWithTopics;
         if (subjectId) {
-          batchQuestions = await filterDuplicates(
-            questionsWithTopics,
-            subjectId,
+          finalQuestions = await filterDuplicates(questionsWithTopics, subjectId);
+        }
+
+        if (finalQuestions.length > 0) {
+          allQuestions.push(...finalQuestions);
+          console.log(
+            `Batch ${batchNumber} completed: ${finalQuestions.length} questions added (Total: ${allQuestions.length}/${finalNumQuestions})`,
           );
         } else {
-          batchQuestions = questionsWithTopics;
-        }
-
-        if (batchQuestions.length > 0) {
-          allQuestions.push(...batchQuestions);
-          console.log(
-            `Final batch completed: ${batchQuestions.length} unique questions generated (Total: ${allQuestions.length}/${finalNumQuestions})`,
+          console.warn(
+            `Batch ${batchNumber} had no unique questions after deduplication`,
           );
         }
-      }
-      break;
-    }
-
-    const estimatedBatches = Math.ceil(remainingQuestions / currentBatchSize);
-    console.log(
-      `Batch ${batchNumber}/${estimatedBatches}: Generating ${actualBatchSize} questions...`,
-    );
-
-    let batchQuestions = await generateBatch(
-      source,
-      actualBatchSize,
-      subjectId,
-      batchNumber,
-      estimatedBatches,
-      0,
-      isUsingSummary,
-    );
-
-    if (batchQuestions && batchQuestions.length > 0) {
-      // Add topics
-      const questionsWithTopics = batchQuestions.map((q: any) => ({
-        ...q,
-        topics: extractTopics(q),
-      }));
-
-      // Filter duplicates if subjectId is provided
-      if (subjectId) {
-        batchQuestions = await filterDuplicates(questionsWithTopics, subjectId);
-      } else {
-        batchQuestions = questionsWithTopics;
-      }
-
-      if (batchQuestions.length > 0) {
-        allQuestions.push(...batchQuestions);
-        consecutiveFailures = 0; // Reset failure counter on success
-        console.log(
-          `Batch ${batchNumber} completed: ${batchQuestions.length} questions added (Total: ${allQuestions.length}/${finalNumQuestions})`,
-        );
-      } else {
-        console.warn(
-          `Batch ${batchNumber} had no unique questions after deduplication`,
-        );
-        consecutiveFailures++;
-      }
-    } else {
-      consecutiveFailures++;
-      console.warn(
-        `Batch ${batchNumber} returned no questions (consecutive failures: ${consecutiveFailures})`,
-      );
-
-      // If we have multiple consecutive failures, reduce batch size
-      if (consecutiveFailures >= 2 && currentBatchSize > 5) {
-        currentBatchSize = Math.max(5, Math.floor(currentBatchSize / 2));
-        console.log(
-          `Reducing batch size to ${currentBatchSize} due to consecutive failures`,
-        );
-        consecutiveFailures = 0; // Reset after adjusting
-      }
-
-      // If we've failed too many times, stop to avoid infinite loop
-      if (consecutiveFailures >= 5) {
-        console.error(
-          `Too many consecutive failures. Stopping generation. Generated ${allQuestions.length} out of ${finalNumQuestions} questions.`,
-        );
-        break;
+      } else if (result.status === 'rejected') {
+        console.error('Batch promise was rejected:', result.reason);
       }
     }
-
-    batchNumber++;
-
-    // Delay between batches to avoid rate limiting
-    if (allQuestions.length < finalNumQuestions) {
-      await new Promise((resolve) => setTimeout(resolve, BATCH_DELAY));
-    }
+    
+    console.log(`✅ Wave ${wave + 1} complete: ${allQuestions.length}/${finalNumQuestions} questions generated so far`);
   }
 
   console.log(

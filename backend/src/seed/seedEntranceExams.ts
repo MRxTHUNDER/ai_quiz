@@ -1,14 +1,10 @@
-import { config } from "dotenv";
 import mongoose from "mongoose";
 import { Subject } from "../models/subject.model";
 import { EntranceExam } from "../models/entranceExam.model";
 import { ENTRANCE_EXAMS } from "../data/exams";
-
-config();
+import { DbConnection } from "../env";
 
 async function connectDb() {
-  const DbConnection =
-    process.env.MONGODB_URL || "mongodb://localhost:27017/quiz";
   if (!DbConnection) {
     throw new Error("MongoDB connection string is not defined");
   }
@@ -39,7 +35,7 @@ async function seedEntranceExams() {
 
     if (existingExam) {
       console.log(
-        `  ⚠ Entrance exam ${examMeta.name} already exists, skipping...`
+        `  ⚠ Entrance exam ${examMeta.name} already exists, skipping...`,
       );
       continue;
     }
@@ -112,7 +108,7 @@ async function seedEntranceExams() {
     });
 
     console.log(
-      `  ✓ Created entrance exam: ${examMeta.name} with ${processedSubjects.length} subjects`
+      `  ✓ Created entrance exam: ${examMeta.name} with ${processedSubjects.length} subjects`,
     );
   }
 

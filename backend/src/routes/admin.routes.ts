@@ -12,6 +12,10 @@ import {
   GetUserProgress,
   GetPlatformStatistics,
 } from "../controller/admin.controller";
+import {
+  GetActiveQuestionJobsForAdmin,
+  GetJobStatusForAdmin,
+} from "../controller/job.controller";
 import { adminAuthMiddleware } from "../middleware/middleware";
 
 export const AdminRouter = express.Router();
@@ -54,3 +58,7 @@ AdminRouter.get(
 
 // Platform Statistics - Require Admin authentication
 AdminRouter.get("/statistics", adminAuthMiddleware, GetPlatformStatistics);
+
+// Background job monitoring - Require Admin authentication
+AdminRouter.get("/jobs/active", adminAuthMiddleware, GetActiveQuestionJobsForAdmin);
+AdminRouter.get("/jobs/:id/status", adminAuthMiddleware, GetJobStatusForAdmin);

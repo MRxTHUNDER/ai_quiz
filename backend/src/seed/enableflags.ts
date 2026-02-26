@@ -1,10 +1,7 @@
-import dotenv from "dotenv";
 import mongoose from "mongoose";
 import { EntranceExam } from "../models/entranceExam.model";
 import { Subject } from "../models/subject.model";
 import { ConnectToDb } from "../db/db";
-
-dotenv.config();
 
 async function backfillEnableFlags() {
   try {

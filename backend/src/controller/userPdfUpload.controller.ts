@@ -3,25 +3,20 @@ import { Subject } from "../models/subject.model";
 import { EntranceExam } from "../models/entranceExam.model";
 import { Pdf } from "../models/pdf.model";
 import { UserPdfUpload } from "../models/userPdfUpload.model";
+import { BackgroundJob } from "../models/backgroundJob.model";
 import { getPresignUploadUrl } from "../service/s3Service";
-import { GenerateAIQuestions } from "../service/generateQuestion";
-import { QuestionModel } from "../models/questions.model";
-import { getOrCreateSummary } from "../service/pdfSummary.service";
-import { GenerateQuestionsFromSubjectKnowledge } from "../service/generateQuestionFromSubject";
+import { enqueueQuestionGenerationJob } from "../queues/questionQueue";
 import { PDFDocument } from "pdf-lib";
+import {
+  MAX_QUESTIONS_PER_PERIOD,
+  R2_WORKER_URL,
+  USER_PDF_COOLDOWN_DAYS,
+  USER_PDF_MAX_PAGES,
+  USER_PDF_MAX_QUESTIONS,
+  USER_PDF_MAX_SIZE_MB,
+} from "../env";
 
-// Configuration from environment variables
-const USER_PDF_COOLDOWN_DAYS = Number(process.env.USER_PDF_COOLDOWN_DAYS || 15);
-const USER_PDF_MAX_SIZE_MB = Number(process.env.USER_PDF_MAX_SIZE_MB || 5);
-const USER_PDF_MAX_PAGES = Number(process.env.USER_PDF_MAX_PAGES || 30);
-const USER_PDF_MAX_QUESTIONS = Number(
-  process.env.USER_PDF_MAX_QUESTIONS || 100,
-);
-const MAX_QUESTIONS_PER_PERIOD = 50; // Max 50 questions per 15 days
 
-/**
- * Check if user has uploaded PDF before (can only upload once)
- */
 async function hasUserUploadedPdf(
   userId: string,
 ): Promise<{ hasUploaded: boolean; uploadDate?: Date }> {
@@ -353,9 +348,8 @@ export const TagUserPDF = async (req: Request, res: Response) => {
       await entranceExam.save();
     }
 
-    const r2WorkerUrl = process.env.R2_WORKER_URL || "";
-    const finalFileUrl = r2WorkerUrl
-      ? `${r2WorkerUrl}${r2WorkerUrl.endsWith("/") ? "" : "/"}${key}`
+    const finalFileUrl = R2_WORKER_URL
+      ? `${R2_WORKER_URL}${R2_WORKER_URL.endsWith("/") ? "" : "/"}${key}`
       : key;
 
     // Create PDF record
@@ -367,22 +361,6 @@ export const TagUserPDF = async (req: Request, res: Response) => {
       entranceExam: entranceExam._id,
       uploadedBy: userId,
     });
-
-    // Get or create summary for this PDF (with topic matching)
-    let summary = null;
-    try {
-      console.log("Processing PDF summary for user upload...");
-      summary = await getOrCreateSummary(
-        pdf._id.toString(),
-        finalFileUrl,
-        subject._id.toString(),
-        entranceExam._id.toString(),
-      );
-      console.log("Summary processed successfully");
-    } catch (summaryError) {
-      console.error("Error processing summary:", summaryError);
-      // Don't fail the request if summary generation fails
-    }
 
     // Check remaining question quota and adjust numQuestions accordingly
     const questionGenCheckForPDF = await canUserGenerateQuestions(userId);
@@ -412,94 +390,43 @@ export const TagUserPDF = async (req: Request, res: Response) => {
       return;
     }
 
-    // Generate questions (respecting quota)
-    let generatedQuestions = null;
+    const queuedJob = await enqueueQuestionGenerationJob({
+      type: "generate_from_pdf",
+      pdfId: pdf._id.toString(),
+      pdfUrl: finalFileUrl,
+      subjectId: subject._id.toString(),
+      entranceExamId: entranceExam._id.toString(),
+      userId,
+      numQuestions,
+    });
 
-    try {
-      console.log(
-        `Generating ${numQuestions} questions for user PDF: ${subject.subjectName}`,
-      );
+    await BackgroundJob.create({
+      externalJobId: String(queuedJob.id),
+      type: "generate_from_pdf",
+      userId,
+      subjectId: subject._id,
+      subjectName: subject.subjectName,
+      entranceExamId: entranceExam._id,
+      entranceExamName: entranceExam.entranceExamName,
+      requestedQuestions: numQuestions,
+      generatedQuestions: 0,
+      status: "queued",
+    });
 
-      let questions = null;
-
-      // Try summary-based generation first if summary exists
-      if (summary?.summaryText) {
-        try {
-          console.log("Attempting question generation from summary...");
-          questions = await GenerateAIQuestions(
-            summary.summaryText,
-            numQuestions,
-            subject._id.toString(),
-            true,
-          );
-          console.log(
-            `Successfully generated ${
-              questions?.length || 0
-            } questions from summary`,
-          );
-        } catch (summaryGenError) {
-          console.error("Summary-based generation failed:", summaryGenError);
-          questions = null;
-        }
-      }
-
-      // Fallback: Generate questions based on subject knowledge (no PDF/summary needed)
-      if (!questions || questions.length === 0) {
-        console.log(
-          `Generating questions from subject knowledge: ${subject.subjectName} (${entranceExam.entranceExamName})...`,
-        );
-        questions = await GenerateQuestionsFromSubjectKnowledge(
-          subject.subjectName,
-          entranceExam.entranceExamName,
-          numQuestions,
-        );
-        console.log(
-          `Generated ${questions?.length || 0} questions from subject knowledge`,
-        );
-      }
-
-      if (questions && Array.isArray(questions) && questions.length > 0) {
-        const formattedQuestions = questions.map((q: any) => ({
-          questionsText: q.questionsText,
-          Options: q.Options,
-          correctOption: q.correctOption,
-          SubjectId: subject._id,
-          entranceExam: entranceExam._id,
-          topics: q.topics,
-          createdBy: userId || undefined,
-        }));
-
-        generatedQuestions = await QuestionModel.insertMany(formattedQuestions);
-        console.log(
-          `Successfully generated and saved ${generatedQuestions.length} questions`,
-        );
-
-        // Record the upload in UserPdfUpload
-        await UserPdfUpload.create({
-          userId,
-          pdfId: pdf._id,
-          uploadedAt: new Date(),
-          questionsGenerated: generatedQuestions.length,
-        });
-      } else {
-        console.warn("No questions generated from AI service");
-      }
-    } catch (questionError) {
-      console.error("Error generating questions:", questionError);
-      // Still record the upload even if question generation fails
-      await UserPdfUpload.create({
-        userId,
-        pdfId: pdf._id,
-        uploadedAt: new Date(),
-        questionsGenerated: 0,
-      });
-    }
+    await UserPdfUpload.create({
+      userId,
+      pdfId: pdf._id,
+      uploadedAt: new Date(),
+      questionsGenerated: 0,
+      backgroundJobId: String(queuedJob.id),
+    });
 
     res.status(201).json({
       status: "Success",
-      message: "PDF uploaded and questions generated successfully",
+      message: "PDF uploaded. Question generation is queued.",
       pdf,
-      questionsGenerated: generatedQuestions?.length || 0,
+      jobId: String(queuedJob.id),
+      estimatedQuestions: numQuestions,
     });
   } catch (error) {
     console.error(error);
@@ -614,52 +541,39 @@ export const GenerateQuestionsDirectUser = async (
       });
     }
 
-    console.log(
-      `Generating ${finalNumQuestions} questions for ${subject.subjectName} (${
-        entranceExam.entranceExamName
-      })${topic ? ` - Topic: ${topic}` : ""}`,
-    );
+    const queuedJob = await enqueueQuestionGenerationJob({
+      type: "generate_direct",
+      subjectId: subject._id.toString(),
+      entranceExamId: entranceExam._id.toString(),
+      topic: topic || undefined,
+      userId,
+      numQuestions: finalNumQuestions,
+    });
 
-    // Generate questions using subject knowledge
-    const questions = await GenerateQuestionsFromSubjectKnowledge(
-      subject.subjectName,
-      entranceExam.entranceExamName,
-      finalNumQuestions,
-      topic || undefined,
-    );
+    await BackgroundJob.create({
+      externalJobId: String(queuedJob.id),
+      type: "generate_direct",
+      userId,
+      subjectId: subject._id,
+      subjectName: subject.subjectName,
+      entranceExamId: entranceExam._id,
+      entranceExamName: entranceExam.entranceExamName,
+      requestedQuestions: finalNumQuestions,
+      generatedQuestions: 0,
+      status: "queued",
+    });
 
-    let generatedQuestions = null;
-
-    if (questions && Array.isArray(questions) && questions.length > 0) {
-      // Format questions for database
-      const formattedQuestions = questions.map((q: any) => ({
-        questionsText: q.questionsText,
-        Options: q.Options,
-        correctOption: q.correctOption,
-        SubjectId: subject._id,
-        createdBy: userId || undefined,
-      }));
-
-      // Save questions to database
-      generatedQuestions = await QuestionModel.insertMany(formattedQuestions);
-      console.log(
-        `Successfully generated and saved ${generatedQuestions.length} questions`,
-      );
-    } else {
-      console.warn("No questions generated from AI service");
-    }
-
-    // Record this generation for quota tracking
     await UserPdfUpload.create({
       userId,
-      questionsGenerated: generatedQuestions?.length || 0,
+      questionsGenerated: 0,
+      backgroundJobId: String(queuedJob.id),
     });
 
     res.status(201).json({
       status: "Success",
-      message: "Questions generated successfully",
-      questionsGenerated: generatedQuestions?.length || 0,
-      questions: generatedQuestions || undefined,
+      message: "Question generation is queued",
+      jobId: String(queuedJob.id),
+      estimatedQuestions: finalNumQuestions,
     });
   } catch (error) {
     console.error("Error generating questions:", error);

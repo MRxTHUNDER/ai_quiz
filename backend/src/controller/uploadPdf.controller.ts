@@ -2,11 +2,10 @@ import { Request, Response } from "express";
 import { Subject } from "../models/subject.model";
 import { EntranceExam } from "../models/entranceExam.model";
 import { Pdf } from "../models/pdf.model";
+import { BackgroundJob } from "../models/backgroundJob.model";
 import { getPresignUploadUrl } from "../service/s3Service";
-import { GenerateAIQuestions } from "../service/generateQuestion";
-import { QuestionModel } from "../models/questions.model";
-import { getOrCreateSummary } from "../service/pdfSummary.service";
-import { GenerateQuestionsFromSubjectKnowledge } from "../service/generateQuestionFromSubject";
+import { enqueueQuestionGenerationJob } from "../queues/questionQueue";
+import { R2_WORKER_URL } from "../env";
 
 export const UploadSubjectPDF = async (req: Request, res: Response) => {
   try {
@@ -53,9 +52,8 @@ export const UploadBannerImage = async (req: Request, res: Response) => {
       "images/banners",
     );
 
-    const r2WorkerUrl = process.env.R2_WORKER_URL || "";
-    const finalFileUrl = r2WorkerUrl
-      ? `${r2WorkerUrl}${r2WorkerUrl.endsWith("/") ? "" : "/"}${key}`
+    const finalFileUrl = R2_WORKER_URL 
+      ? `${R2_WORKER_URL}${R2_WORKER_URL.endsWith("/") ? "" : "/"}${key}`
       : key;
 
     res.status(200).json({
@@ -155,11 +153,10 @@ export const TagPDF = async (req: Request, res: Response) => {
       await entranceExam.save();
     }
 
-    const r2WorkerUrl = process.env.R2_WORKER_URL || "";
     // Ensure proper URL concatenation - add / if base URL doesn't end with it
     // Key format is always "uploads/pdf/..." (no leading slash)
-    const finalFileUrl = r2WorkerUrl
-      ? `${r2WorkerUrl}${r2WorkerUrl.endsWith("/") ? "" : "/"}${key}`
+    const finalFileUrl = R2_WORKER_URL
+      ? `${R2_WORKER_URL}${R2_WORKER_URL.endsWith("/") ? "" : "/"}${key}`
       : key;
 
     const pdf = await Pdf.create({
@@ -177,121 +174,35 @@ export const TagPDF = async (req: Request, res: Response) => {
       await subject.save();
     }
 
-    // Get or create summary for this PDF (with topic matching)
-    let summary = null;
-    try {
-      console.log("Processing PDF summary...");
-      summary = await getOrCreateSummary(
-        pdf._id.toString(),
-        finalFileUrl,
-        subject._id.toString(),
-        entranceExam._id.toString(),
-      );
-      console.log("Summary processed successfully");
-    } catch (summaryError: any) {
-      // Log the FULL error details
-      console.error("=== ERROR PROCESSING SUMMARY (FULL) ===");
-      console.error("Error:", summaryError);
-      console.error("Error message:", summaryError?.message);
-      console.error("Error stack:", summaryError?.stack);
-      if (summaryError?.response) {
-        console.error(
-          "Error response:",
-          JSON.stringify(summaryError.response, null, 2),
-        );
-      }
-      console.error("======================================");
-      // Don't fail the request if summary generation fails
-    }
+    const queuedJob = await enqueueQuestionGenerationJob({
+      type: "generate_from_pdf",
+      pdfId: pdf._id.toString(),
+      pdfUrl: finalFileUrl,
+      subjectId: subject._id.toString(),
+      entranceExamId: entranceExam._id.toString(),
+      userId,
+      numQuestions: finalNumQuestions,
+    });
 
-    // Generate questions (using default 50-60 if not provided)
-    let generatedQuestions = null;
-    if (finalNumQuestions && finalNumQuestions > 0) {
-      try {
-        console.log(
-          `Generating ${finalNumQuestions} questions for subject ${subject.subjectName}`,
-        );
-
-        let questions = null;
-
-        // Try summary-based generation first if summary exists
-        if (summary?.summaryText) {
-          try {
-            console.log("Attempting question generation from summary...");
-            questions = await GenerateAIQuestions(
-              summary.summaryText,
-              finalNumQuestions,
-              subject._id.toString(),
-              true,
-            );
-            console.log(
-              `Successfully generated ${
-                questions?.length || 0
-              } questions from summary`,
-            );
-          } catch (summaryGenError) {
-            console.error("Summary-based generation failed:", summaryGenError);
-            questions = null;
-          }
-        }
-
-        // Fallback: Generate questions based on subject knowledge (no PDF/summary needed)
-        if (!questions || questions.length === 0) {
-          console.log(
-            `Generating questions from subject knowledge: ${subject.subjectName} (${entranceExam.entranceExamName})...`,
-          );
-          questions = await GenerateQuestionsFromSubjectKnowledge(
-            subject.subjectName,
-            entranceExam.entranceExamName,
-            finalNumQuestions,
-          );
-          console.log(
-            `Generated ${
-              questions?.length || 0
-            } questions from subject knowledge`,
-          );
-        }
-
-        if (questions && Array.isArray(questions) && questions.length > 0) {
-          // Format questions for database
-          const formattedQuestions = questions.map((q: any) => ({
-            questionsText: q.questionsText,
-            Options: q.Options,
-            correctOption: q.correctOption,
-            SubjectId: subject._id,
-            entranceExam: entranceExam._id,
-            createdBy: userId || undefined,
-          }));
-
-          // Save questions to database
-          generatedQuestions =
-            await QuestionModel.insertMany(formattedQuestions);
-          console.log(
-            `Successfully generated and saved ${generatedQuestions.length} questions`,
-          );
-        } else {
-          console.warn("No questions generated from AI service");
-        }
-      } catch (questionError) {
-        console.error("Error generating questions:", questionError);
-        // Don't fail the entire request if question generation fails
-        // Just log the error and continue
-      }
-    }
+    await BackgroundJob.create({
+      externalJobId: String(queuedJob.id),
+      type: "generate_from_pdf",
+      userId,
+      subjectId: subject._id,
+      subjectName: subject.subjectName,
+      entranceExamId: entranceExam._id,
+      entranceExamName: entranceExam.entranceExamName,
+      requestedQuestions: finalNumQuestions,
+      generatedQuestions: 0,
+      status: "queued",
+    });
 
     res.status(201).json({
       status: "Success",
-      message: "PDF tagged and registered successfully",
+      message: "PDF tagged. Question generation is queued.",
       pdf,
-      summary: summary
-        ? {
-            id: summary._id,
-            topics: summary.topics,
-            reused: summary.sourcePdfs.length > 1,
-          }
-        : undefined,
-      questionsGenerated: generatedQuestions?.length || 0,
-      questions: generatedQuestions || undefined,
+      jobId: String(queuedJob.id),
+      estimatedQuestions: finalNumQuestions,
     });
   } catch (error) {
     console.error(error);
@@ -371,47 +282,33 @@ export const GenerateQuestionsDirect = async (req: Request, res: Response) => {
       });
     }
 
-    console.log(
-      `Generating ${finalNumQuestions} questions for ${subject.subjectName} (${
-        entranceExam.entranceExamName
-      })${topic ? ` - Topic: ${topic}` : ""}`,
-    );
+    const queuedJob = await enqueueQuestionGenerationJob({
+      type: "generate_direct",
+      subjectId: subject._id.toString(),
+      entranceExamId: entranceExam._id.toString(),
+      topic: topic || undefined,
+      userId,
+      numQuestions: finalNumQuestions,
+    });
 
-    // Generate questions using subject knowledge
-    const questions = await GenerateQuestionsFromSubjectKnowledge(
-      subject.subjectName,
-      entranceExam.entranceExamName,
-      finalNumQuestions,
-      topic || undefined,
-    );
-
-    let generatedQuestions = null;
-
-    if (questions && Array.isArray(questions) && questions.length > 0) {
-      // Format questions for database
-      const formattedQuestions = questions.map((q: any) => ({
-        questionsText: q.questionsText,
-        Options: q.Options,
-        correctOption: q.correctOption,
-        SubjectId: subject._id,
-        entranceExam: entranceExam._id,
-        createdBy: userId || undefined,
-      }));
-
-      // Save questions to database
-      generatedQuestions = await QuestionModel.insertMany(formattedQuestions);
-      console.log(
-        `Successfully generated and saved ${generatedQuestions.length} questions`,
-      );
-    } else {
-      console.warn("No questions generated from AI service");
-    }
+    await BackgroundJob.create({
+      externalJobId: String(queuedJob.id),
+      type: "generate_direct",
+      userId,
+      subjectId: subject._id,
+      subjectName: subject.subjectName,
+      entranceExamId: entranceExam._id,
+      entranceExamName: entranceExam.entranceExamName,
+      requestedQuestions: finalNumQuestions,
+      generatedQuestions: 0,
+      status: "queued",
+    });
 
     res.status(201).json({
       status: "Success",
-      message: "Questions generated successfully",
-      questionsGenerated: generatedQuestions?.length || 0,
-      questions: generatedQuestions || undefined,
+      message: "Question generation is queued",
+      jobId: String(queuedJob.id),
+      estimatedQuestions: finalNumQuestions,
     });
   } catch (error) {
     console.error("Error generating questions:", error);

@@ -36,12 +36,6 @@ export const adminAuthMiddleware = async (
     const adminToken = req.cookies.adminToken;
     const userToken = req.cookies.userToken;
 
-    // Log for debugging
-    console.log("[adminAuthMiddleware] Received cookies:", {
-      hasUserToken: !!userToken,
-      hasAdminToken: !!adminToken,
-      path: req.path,
-    });
 
     // Reject if adminToken is not present
     if (!adminToken) {
@@ -112,7 +106,6 @@ export const adminAuthMiddleware = async (
       role: user.role as UserRole,
     };
 
-    console.log("[adminAuthMiddleware] Admin authenticated:", user.email);
     next();
   } catch (err) {
     console.error("[adminAuthMiddleware] Authentication error:", err);
@@ -151,13 +144,6 @@ export const userAuthMiddleware = async (
   try {
     const userToken = req.cookies.userToken;
     const adminToken = req.cookies.adminToken;
-
-    // Log for debugging
-    console.log("[userAuthMiddleware] Received cookies:", {
-      hasUserToken: !!userToken,
-      hasAdminToken: !!adminToken,
-      path: req.path,
-    });
 
     // Reject if userToken is not present
     if (!userToken) {
