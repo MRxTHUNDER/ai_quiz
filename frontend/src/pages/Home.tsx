@@ -534,7 +534,7 @@ function Home() {
           </p>
           <Button
             size="lg"
-            className="bg-white text-blue-600 hover:bg-gray-50 shadow-xl"
+            className="text-blue-600 hover:bg-gray-50 shadow-xl"
             onClick={() => navigate("/signup")}
           >
             Get Started Today

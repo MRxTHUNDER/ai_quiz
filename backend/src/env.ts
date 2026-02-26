@@ -71,3 +71,47 @@ export const R2_BUCKET_NAME = process.env.R2_BUCKET_NAME || "";
 export const USER_JWT_SECRET = process.env.USER_JWT_SECRET || "user_secret_key";
 export const ADMIN_JWT_SECRET =
   process.env.ADMIN_JWT_SECRET || "admin_secret_key";
+
+const REQUIRED_ENV_KEYS = [
+  "OPENAI_API_KEY",
+  "PORT",
+  "FRONTEND_URL",
+  "NODE_ENV",
+  "ADMIN_PASSWORD",
+  "COOKIE_DOMAIN",
+  "R2_WORKER_URL",
+  "USER_PDF_COOLDOWN_DAYS",
+  "USER_PDF_MAX_SIZE_MB",
+  "USER_PDF_MAX_PAGES",
+  "USER_PDF_MAX_QUESTIONS",
+  "MONGODB_URL",
+  "QUESTION_BATCH_SIZE",
+  "QUESTION_BATCH_DELAY_MS",
+  "QUESTION_QUEUE_NAME",
+  "REDIS_URL",
+  "MAX_RETRIES",
+  "QUESTION_WORKER_CONCURRENCY",
+  "DUPLICATE_SIMILARITY_THRESHOLD",
+  "OPENAI_MODEL",
+  "NUM_QUESTIONS",
+  "OPENAI_MODEL_MINI",
+  "R2_ENDPOINT_URL",
+  "R2_ACCESS_KEY_ID",
+  "R2_SECRET_ACCESS_KEY",
+  "R2_BUCKET_NAME",
+  "USER_JWT_SECRET",
+  "ADMIN_JWT_SECRET",
+] as const;
+
+export const validateRequiredEnvVars = () => {
+  const missingKeys = REQUIRED_ENV_KEYS.filter((key) => {
+    const value = process.env[key];
+    return value === undefined || value.trim() === "";
+  });
+
+  if (missingKeys.length > 0) {
+    throw new Error(
+      `Missing required environment variables: ${missingKeys.join(", ")}`,
+    );
+  }
+};

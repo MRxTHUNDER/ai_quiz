@@ -15,7 +15,7 @@ const MAX_RETRIES = 3;
 const BATCH_SIZE_QUESTIONS = 50; // Questions per batch
 const MAX_BATCHES = 10; // Maximum number of parallel batches
 
-const BATCH_DELAY = 2000; // 2 seconds
+const BATCH_DELAY = 5000; // 5 seconds between waves
 
 /**
  * Extract topics/keywords from question text
@@ -791,6 +791,11 @@ Return ONLY the JSON array. Do not include markdown code blocks, explanations, o
     }
     
     console.log(`✅ Wave ${wave + 1} complete: ${allQuestions.length}/${finalNumQuestions} questions generated so far`);
+
+    if (wave < totalWaves - 1) {
+      console.log(`⏳ Waiting ${BATCH_DELAY / 1000}s before next wave...`);
+      await new Promise((resolve) => setTimeout(resolve, BATCH_DELAY));
+    }
   }
 
   console.log(

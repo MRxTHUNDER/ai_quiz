@@ -2,7 +2,7 @@ import { BATCH_SIZE, client, MAX_RETRIES, OPENAI_MODEL_MINI } from "../env";
 
 const BATCH_SIZE_QUESTIONS = 50; // Questions per batch
 const MAX_BATCHES = 10; // Maximum number of parallel batches per wave
-const BATCH_DELAY = 2000; // 2 seconds
+const BATCH_DELAY = 5000; // 5 seconds between waves
 
 const fixJsonEscaping = (jsonString: string): string => {
   let fixed = jsonString;
@@ -530,6 +530,11 @@ export const GenerateQuestionsFromSubjectKnowledge = async (
     }
     
     console.log(`✅ Wave ${wave + 1} complete: ${allQuestions.length}/${numQuestions} questions generated so far`);
+
+    if (wave < totalWaves - 1) {
+      console.log(`⏳ Waiting ${BATCH_DELAY / 1000}s before next wave...`);
+      await new Promise((resolve) => setTimeout(resolve, BATCH_DELAY));
+    }
   }
 
   console.log(

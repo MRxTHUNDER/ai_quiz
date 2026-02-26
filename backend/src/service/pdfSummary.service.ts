@@ -1,10 +1,6 @@
 import { Summary } from "../models/summary.model";
 import { client, OPENAI_MODEL } from "../env";
 
-
-/**
- * Clean JSON output by removing markdown code blocks and extra whitespace
- */
 const cleanJsonOutput = (rawOutput: string): string => {
   if (!rawOutput) return rawOutput;
 
@@ -50,8 +46,8 @@ const parseJsonSafely = (jsonString: string): any => {
       throw new Error(
         `AI returned an error message instead of JSON: ${jsonString.substring(
           0,
-          200
-        )}`
+          200,
+        )}`,
       );
     }
 
@@ -60,7 +56,7 @@ const parseJsonSafely = (jsonString: string): any => {
 };
 
 export const extractTopicsAndSummaryFromPDF = async (
-  fileUrl: string
+  fileUrl: string,
 ): Promise<{ topics: string[]; summaryText: string; keywords: string[] }> => {
   try {
     const prompt = `
@@ -116,7 +112,7 @@ No markdown code blocks, no explanations, just the JSON object.
     ) {
       // Log the FULL error message
       console.error(
-        "=== AI RETURNED ERROR MESSAGE (FULL) - extractTopicsAndSummaryFromPDF ==="
+        "=== AI RETURNED ERROR MESSAGE (FULL) - extractTopicsAndSummaryFromPDF ===",
       );
       console.error("Full AI response:", content);
       console.error("Response length:", content.length);
@@ -132,7 +128,7 @@ No markdown code blocks, no explanations, just the JSON object.
     console.log(
       `Extracted ${result.topics?.length || 0} topics and generated summary (${
         result.keywords?.length || 0
-      } keywords)`
+      } keywords)`,
     );
 
     return {
@@ -159,7 +155,7 @@ No markdown code blocks, no explanations, just the JSON object.
           `- PDF is corrupted or unreadable\n` +
           `- PDF is too large or complex\n` +
           `- File URL is not accessible\n\n` +
-          `Original error: ${error.message}`
+          `Original error: ${error.message}`,
       );
     }
 
@@ -167,7 +163,7 @@ No markdown code blocks, no explanations, just the JSON object.
       throw new Error(
         `Failed to parse AI response. The AI service may have returned an unexpected format.\n` +
           `Please try again or check if the PDF is valid.\n\n` +
-          `Original error: ${error.message}`
+          `Original error: ${error.message}`,
       );
     }
 
@@ -177,7 +173,7 @@ No markdown code blocks, no explanations, just the JSON object.
 
 const calculateTopicSimilarity = (
   topics1: string[],
-  topics2: string[]
+  topics2: string[],
 ): number => {
   const set1 = new Set(topics1.map((t) => t.toLowerCase().trim()));
   const set2 = new Set(topics2.map((t) => t.toLowerCase().trim()));
@@ -193,7 +189,7 @@ export const findSimilarSummary = async (
   subjectId: string,
   entranceExamId: string,
   topics: string[],
-  similarityThreshold: number = 0.6
+  similarityThreshold: number = 0.6,
 ): Promise<any | null> => {
   try {
     // Get all summaries for this subject and exam
@@ -222,8 +218,8 @@ export const findSimilarSummary = async (
     if (mostSimilar) {
       console.log(
         `Found similar summary with ${(highestSimilarity * 100).toFixed(
-          1
-        )}% topic overlap`
+          1,
+        )}% topic overlap`,
       );
     }
 
@@ -236,7 +232,7 @@ export const findSimilarSummary = async (
 
 export const generateSummaryFromPDF = async (
   fileUrl: string,
-  topics: string[]
+  topics: string[],
 ): Promise<{ summaryText: string; keywords: string[] }> => {
   try {
     const topicsText = topics.join(", ");
@@ -291,7 +287,7 @@ No markdown code blocks, no explanations, just the JSON object.
     ) {
       // Log the FULL error message
       console.error(
-        "=== AI RETURNED ERROR MESSAGE (FULL) - generateSummaryFromPDF ==="
+        "=== AI RETURNED ERROR MESSAGE (FULL) - generateSummaryFromPDF ===",
       );
       console.error("Full AI response:", content);
       console.error("Response length:", content.length);
@@ -307,7 +303,7 @@ No markdown code blocks, no explanations, just the JSON object.
     console.log(
       `Generated summary: ${result.summaryText.substring(0, 100)}... (${
         result.keywords.length
-      } keywords)`
+      } keywords)`,
     );
 
     return {
@@ -333,7 +329,7 @@ No markdown code blocks, no explanations, just the JSON object.
           `- PDF is corrupted or unreadable\n` +
           `- PDF is too large or complex\n` +
           `- File URL is not accessible\n\n` +
-          `Original error: ${error.message}`
+          `Original error: ${error.message}`,
       );
     }
 
@@ -349,7 +345,7 @@ export const getOrCreateSummary = async (
   pdfId: string,
   fileUrl: string,
   subjectId: string,
-  entranceExamId: string
+  entranceExamId: string,
 ): Promise<any> => {
   try {
     console.log("Extracting topics and generating summary from PDF...");
@@ -364,7 +360,7 @@ export const getOrCreateSummary = async (
     const existingSummary = await findSimilarSummary(
       subjectId,
       entranceExamId,
-      topics
+      topics,
     );
 
     if (existingSummary) {

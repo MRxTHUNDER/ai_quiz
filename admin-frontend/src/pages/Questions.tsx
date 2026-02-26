@@ -29,6 +29,15 @@ interface Pagination {
   hasPrevPage: boolean;
 }
 
+interface ActiveQuestionJob {
+  externalJobId?: string;
+  status?: string;
+  subjectId?: string | null;
+  subjectName?: string | null;
+  entranceExamId?: string | null;
+  entranceExamName?: string | null;
+}
+
 export default function Questions() {
   const authUser = useAuthStore((s) => s.authUser);
   const [entranceExams, setEntranceExams] = useState<EntranceExam[]>([]);
@@ -47,6 +56,9 @@ export default function Questions() {
   }>({ type: null, message: "" });
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [isJobRunning, setIsJobRunning] = useState(false);
+  const [activeQuestionJobs, setActiveQuestionJobs] = useState<
+    ActiveQuestionJob[]
+  >([]);
 
   // My Questions tab state
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -65,26 +77,28 @@ export default function Questions() {
       const response = await axiosInstance.get(
         "/admin/jobs/active?type=question-generation",
       );
-      const jobs = (response.data?.jobs || []) as Array<{
-        externalJobId?: string;
-        status?: string;
-      }>;
+      const jobs = (response.data?.jobs || []) as ActiveQuestionJob[];
+      const runningStatuses = ["queued", "running", "partial"];
+      const runningJobs = jobs.filter(
+        (job) => !!job.status && runningStatuses.includes(job.status),
+      );
 
-      if (!jobs.length) {
+      setActiveQuestionJobs(runningJobs);
+
+      if (!runningJobs.length) {
         setActiveJobId(null);
         setIsJobRunning(false);
         return;
       }
 
-      const job = jobs[0];
+      const job = runningJobs[0];
       const nextJobId = job.externalJobId || null;
-      const runningStatuses = ["queued", "running", "partial"];
-      const isRunning = !!job.status && runningStatuses.includes(job.status);
 
-      setActiveJobId(isRunning ? nextJobId : null);
-      setIsJobRunning(isRunning && !!nextJobId);
+      setActiveJobId(nextJobId);
+      setIsJobRunning(!!nextJobId);
     } catch (error) {
       console.error("Failed to check active jobs:", error);
+      setActiveQuestionJobs([]);
       setActiveJobId(null);
       setIsJobRunning(false);
     }
@@ -130,16 +144,14 @@ export default function Questions() {
         const job = response.data?.job as { status?: string } | undefined;
 
         if (!job?.status || !runningStatuses.includes(job.status)) {
-          setActiveJobId(null);
-          setIsJobRunning(false);
+          await checkActiveJob();
           return;
         }
 
         setIsJobRunning(true);
       } catch (error) {
         console.error("Failed to poll job status:", error);
-        setActiveJobId(null);
-        setIsJobRunning(false);
+        await checkActiveJob();
       }
     };
 
@@ -149,7 +161,7 @@ export default function Questions() {
     return () => {
       window.clearInterval(intervalId);
     };
-  }, [activeJobId, activeTab]);
+  }, [activeJobId, activeTab, checkActiveJob]);
 
   // Update filtered subjects when exam selection changes
   useEffect(() => {
@@ -263,6 +275,58 @@ export default function Questions() {
     setFilterSubjectId("");
   };
 
+  const selectedEntranceExam = entranceExams.find(
+    (exam) =>
+      exam.entranceExamId === selectedEntranceExamId ||
+      exam._id === selectedEntranceExamId,
+  );
+
+  const normalizeValue = (value?: string | null) =>
+    (value || "").trim().toLowerCase();
+
+  const isSelectedCombinationRunning =
+    !!selectedSubject &&
+    !!selectedEntranceExamId &&
+    activeQuestionJobs.some((job) => {
+      const sameSubject =
+        normalizeValue(job.subjectName) === normalizeValue(selectedSubject);
+
+      const sameExamById =
+        !!selectedEntranceExam &&
+        [
+          normalizeValue(selectedEntranceExam._id),
+          normalizeValue(selectedEntranceExam.entranceExamId),
+          normalizeValue(selectedEntranceExamId),
+        ].includes(normalizeValue(job.entranceExamId));
+
+      const sameExamByName =
+        !!selectedEntranceExam &&
+        normalizeValue(job.entranceExamName) ===
+          normalizeValue(selectedEntranceExam.entranceExamName);
+
+      return sameSubject && (sameExamById || sameExamByName);
+    });
+
+  const blockedCombinationJob = isSelectedCombinationRunning
+    ? activeQuestionJobs.find((job) => {
+        const sameSubject =
+          normalizeValue(job.subjectName) === normalizeValue(selectedSubject);
+        const sameExamById =
+          !!selectedEntranceExam &&
+          [
+            normalizeValue(selectedEntranceExam._id),
+            normalizeValue(selectedEntranceExam.entranceExamId),
+            normalizeValue(selectedEntranceExamId),
+          ].includes(normalizeValue(job.entranceExamId));
+        const sameExamByName =
+          !!selectedEntranceExam &&
+          normalizeValue(job.entranceExamName) ===
+            normalizeValue(selectedEntranceExam.entranceExamName);
+
+        return sameSubject && (sameExamById || sameExamByName);
+      })
+    : null;
+
   const handleGenerate = async () => {
     if (!selectedSubject) {
       setStatus({
@@ -276,6 +340,15 @@ export default function Questions() {
       setStatus({
         type: "error",
         message: "Please select an entrance exam",
+      });
+      return;
+    }
+
+    if (isSelectedCombinationRunning) {
+      setStatus({
+        type: "error",
+        message:
+          "Questions for this entrance exam + subject are already being generated. Please wait until it completes.",
       });
       return;
     }
@@ -374,6 +447,8 @@ export default function Questions() {
       if (activeTab === "my-questions") {
         fetchQuestions(1);
       }
+
+      await checkActiveJob();
     } catch (error: unknown) {
       console.error("Generation error:", error);
       const errorMessage =
@@ -545,11 +620,24 @@ export default function Questions() {
                 </p>
               )}
 
+              {isSelectedCombinationRunning && (
+                <p className="text-sm text-amber-700">
+                  This combination is already in queue/running: {selectedEntranceExam?.entranceExamName || "Selected exam"} + {selectedSubject}
+                  {blockedCombinationJob?.externalJobId
+                    ? ` (Job #${blockedCombinationJob.externalJobId})`
+                    : ""}
+                  . You can choose another subject or exam and queue that instead.
+                </p>
+              )}
+
               {/* Generate Button */}
               <Button
                 onClick={handleGenerate}
                 disabled={
-                  generating || !selectedSubject || !selectedEntranceExamId
+                  generating ||
+                  !selectedSubject ||
+                  !selectedEntranceExamId ||
+                  isSelectedCombinationRunning
                 }
                 className="w-full"
               >

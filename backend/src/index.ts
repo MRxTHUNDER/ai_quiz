@@ -14,7 +14,12 @@ import { UploadPdfRouter } from "./routes/uploadPdf.routes";
 import { UserRouter } from "./routes/user.routes";
 import { UIFlagsRouter } from "./routes/uiFlags.routes";
 import { JobRouter } from "./routes/job.routes";
-import { NODE_ENV, PORT, productionOrigins } from "./env";
+import {
+  NODE_ENV,
+  PORT,
+  productionOrigins,
+  validateRequiredEnvVars,
+} from "./env";
 import { startQuestionWorker, stopQuestionWorker } from "./workers/questionWorker";
 
 const app = express();
@@ -54,6 +59,8 @@ app.use("/api/v1/ui-flags", UIFlagsRouter);
 app.use("/api/v1/jobs", JobRouter);
 
 const bootstrap = async () => {
+  validateRequiredEnvVars();
+
   await ConnectToDb();
 
   await startQuestionWorker();
