@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import { randomUUID } from "crypto";
 import { Subject } from "../models/subject.model";
 import { EntranceExam } from "../models/entranceExam.model";
 import { Pdf } from "../models/pdf.model";
@@ -174,18 +175,10 @@ export const TagPDF = async (req: Request, res: Response) => {
       await subject.save();
     }
 
-    const queuedJob = await enqueueQuestionGenerationJob({
-      type: "generate_from_pdf",
-      pdfId: pdf._id.toString(),
-      pdfUrl: finalFileUrl,
-      subjectId: subject._id.toString(),
-      entranceExamId: entranceExam._id.toString(),
-      userId,
-      numQuestions: finalNumQuestions,
-    });
+    const externalJobId = randomUUID();
 
     await BackgroundJob.create({
-      externalJobId: String(queuedJob.id),
+      externalJobId,
       type: "generate_from_pdf",
       userId,
       subjectId: subject._id,
@@ -197,11 +190,39 @@ export const TagPDF = async (req: Request, res: Response) => {
       status: "queued",
     });
 
+    try {
+      await enqueueQuestionGenerationJob(
+        {
+          type: "generate_from_pdf",
+          pdfId: pdf._id.toString(),
+          pdfUrl: finalFileUrl,
+          subjectId: subject._id.toString(),
+          entranceExamId: entranceExam._id.toString(),
+          userId,
+          numQuestions: finalNumQuestions,
+        },
+        {
+          jobId: externalJobId,
+        },
+      );
+    } catch (queueError) {
+      await BackgroundJob.findOneAndUpdate(
+        { externalJobId },
+        {
+          $set: {
+            status: "failed",
+            completedAt: new Date(),
+          },
+        },
+      );
+      throw queueError;
+    }
+
     res.status(201).json({
       status: "Success",
       message: "PDF tagged. Question generation is queued.",
       pdf,
-      jobId: String(queuedJob.id),
+      jobId: externalJobId,
       estimatedQuestions: finalNumQuestions,
     });
   } catch (error) {
@@ -282,17 +303,10 @@ export const GenerateQuestionsDirect = async (req: Request, res: Response) => {
       });
     }
 
-    const queuedJob = await enqueueQuestionGenerationJob({
-      type: "generate_direct",
-      subjectId: subject._id.toString(),
-      entranceExamId: entranceExam._id.toString(),
-      topic: topic || undefined,
-      userId,
-      numQuestions: finalNumQuestions,
-    });
+    const externalJobId = randomUUID();
 
     await BackgroundJob.create({
-      externalJobId: String(queuedJob.id),
+      externalJobId,
       type: "generate_direct",
       userId,
       subjectId: subject._id,
@@ -304,10 +318,37 @@ export const GenerateQuestionsDirect = async (req: Request, res: Response) => {
       status: "queued",
     });
 
+    try {
+      await enqueueQuestionGenerationJob(
+        {
+          type: "generate_direct",
+          subjectId: subject._id.toString(),
+          entranceExamId: entranceExam._id.toString(),
+          topic: topic || undefined,
+          userId,
+          numQuestions: finalNumQuestions,
+        },
+        {
+          jobId: externalJobId,
+        },
+      );
+    } catch (queueError) {
+      await BackgroundJob.findOneAndUpdate(
+        { externalJobId },
+        {
+          $set: {
+            status: "failed",
+            completedAt: new Date(),
+          },
+        },
+      );
+      throw queueError;
+    }
+
     res.status(201).json({
       status: "Success",
       message: "Question generation is queued",
-      jobId: String(queuedJob.id),
+      jobId: externalJobId,
       estimatedQuestions: finalNumQuestions,
     });
   } catch (error) {
