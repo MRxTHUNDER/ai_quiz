@@ -586,7 +586,7 @@ export default function ExamsManagement() {
       )}
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-4xl max-h-[92vh] overflow-y-auto p-6 md:p-7">
           <DialogClose onClick={() => setIsDialogOpen(false)} />
           <DialogHeader>
             <DialogTitle>
@@ -594,125 +594,144 @@ export default function ExamsManagement() {
             </DialogTitle>
           </DialogHeader>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-6">
             {error && (
               <div className="p-3 bg-destructive/10 text-destructive text-sm rounded-md">
                 {error}
               </div>
             )}
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="entranceExamName">
-                  Exam Name <span className="text-destructive">*</span>
-                </Label>
-                <Input
-                  id="entranceExamName"
-                  value={formData.entranceExamName}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      entranceExamName: e.target.value,
-                    })
-                  }
-                  placeholder="e.g., JEE Main"
-                  required
-                />
+            <div className="rounded-xl border bg-card p-4 md:p-5 space-y-4">
+              <div>
+                <h3 className="text-sm font-semibold tracking-wide text-muted-foreground uppercase">
+                  Exam Details
+                </h3>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="entranceExamId">
-                  Exam ID <span className="text-destructive">*</span>
-                </Label>
-                <Input
-                  id="entranceExamId"
-                  value={formData.entranceExamId}
-                  onChange={(e) =>
-                    setFormData({ ...formData, entranceExamId: e.target.value })
-                  }
-                  placeholder="e.g., JEE-MAIN-2024"
-                  required
-                />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="entranceExamName">
+                    Exam Name <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    id="entranceExamName"
+                    className="h-10"
+                    value={formData.entranceExamName}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        entranceExamName: e.target.value,
+                      })
+                    }
+                    placeholder="e.g., JEE Main"
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="entranceExamId">
+                    Exam ID <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    id="entranceExamId"
+                    className="h-10"
+                    value={formData.entranceExamId}
+                    onChange={(e) =>
+                      setFormData({ ...formData, entranceExamId: e.target.value })
+                    }
+                    placeholder="e.g., JEE-MAIN-2024"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-[1fr_1fr_auto] gap-4 items-end">
+                <div className="space-y-2">
+                  <Label htmlFor="durationMinutes">
+                    Total Duration (minutes){" "}
+                    <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    id="durationMinutes"
+                    className="h-10"
+                    type="number"
+                    min="1"
+                    value={formData.durationMinutes}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        durationMinutes: e.target.value,
+                      })
+                    }
+                    placeholder="e.g., 180"
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="weeklyLimit">
+                    Weekly Limit <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    id="weeklyLimit"
+                    className="h-10"
+                    type="number"
+                    min="1"
+                    value={formData.weeklyLimit}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        weeklyLimit: e.target.value,
+                      })
+                    }
+                    placeholder="e.g., 7"
+                    required
+                  />
+                </div>
+                <div className="w-full lg:w-auto">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <Label htmlFor="examEnabled" className="whitespace-nowrap">
+                      Exam Status
+                    </Label>
+                    <Button
+                      type="button"
+                      id="examEnabled"
+                      onClick={() =>
+                        setFormData({
+                          ...formData,
+                          isEnabled:
+                            formData.isEnabled === "true" ? "false" : "true",
+                        })
+                      }
+                      className={`h-10 px-6 min-w-28 ${
+                        formData.isEnabled === "true"
+                          ? "bg-emerald-500 hover:bg-emerald-600 text-white"
+                          : "bg-red-500 hover:bg-red-600 text-white"
+                      }`}
+                    >
+                      {formData.isEnabled === "true" ? "Enabled" : "Disabled"}
+                    </Button>
+                  </div>
+                </div>
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="durationMinutes">
-                  Total Duration (minutes){" "}
-                  <span className="text-destructive">*</span>
-                </Label>
-                <Input
-                  id="durationMinutes"
-                  type="number"
-                  min="1"
-                  value={formData.durationMinutes}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      durationMinutes: e.target.value,
-                    })
-                  }
-                  placeholder="e.g., 180"
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="weeklyLimit">
-                  Weekly Limit <span className="text-destructive">*</span>
-                </Label>
-                <Input
-                  id="weeklyLimit"
-                  type="number"
-                  min="1"
-                  value={formData.weeklyLimit}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      weeklyLimit: e.target.value,
-                    })
-                  }
-                  placeholder="e.g., 7"
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="examEnabled">Exam Status</Label>
-                <Button
-                  type="button"
-                  id="examEnabled"
-                  size="sm"
-                  onClick={() =>
-                    setFormData({
-                      ...formData,
-                      isEnabled:
-                        formData.isEnabled === "true" ? "false" : "true",
-                    })
-                  }
-                  className={
-                    formData.isEnabled === "true"
-                      ? "bg-emerald-500 hover:bg-emerald-600 text-white"
-                      : "bg-red-500 hover:bg-red-600 text-white"
-                  }
-                >
-                  {formData.isEnabled === "true" ? "Enabled" : "Disabled"}
-                </Button>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label>
+            <div className="rounded-xl border bg-card p-4 md:p-5 space-y-4">
+              <Label className="text-base font-semibold">
                 Subjects <span className="text-destructive">*</span>
               </Label>
-              <div className="space-y-3 border rounded-lg p-4">
+              <div className="space-y-3">
                 {subjects.map((subject, index) => (
-                  <div key={index} className="flex gap-2 items-end">
-                    <div className="flex-1 space-y-2">
+                  <div
+                    key={index}
+                    className="grid grid-cols-1 lg:grid-cols-[1fr_160px_auto_auto] gap-3 items-end border rounded-lg p-3 bg-muted/20"
+                  >
+                    <div className="space-y-2">
                       <Label htmlFor={`subject-${index}`} className="text-xs">
                         Subject Name
                       </Label>
                       <Input
                         id={`subject-${index}`}
+                        className="h-10"
                         value={subject.subjectName}
                         onChange={(e) =>
                           handleSubjectChange(
@@ -725,12 +744,13 @@ export default function ExamsManagement() {
                         required
                       />
                     </div>
-                    <div className="w-32 space-y-2">
+                    <div className="space-y-2">
                       <Label htmlFor={`duration-${index}`} className="text-xs">
                         Duration (min)
                       </Label>
                       <Input
                         id={`duration-${index}`}
+                        className="h-10"
                         type="number"
                         min="1"
                         value={subject.durationMinutes}
@@ -746,18 +766,17 @@ export default function ExamsManagement() {
                     </div>
                     <Button
                       type="button"
-                      size="sm"
+                      className={`h-10 px-5 w-full lg:w-auto ${
+                        subject.isEnabled
+                          ? "bg-emerald-500 hover:bg-emerald-600 text-white"
+                          : "bg-red-500 hover:bg-red-600 text-white"
+                      }`}
                       onClick={() =>
                         handleSubjectChange(
                           index,
                           "isEnabled",
                           !subject.isEnabled,
                         )
-                      }
-                      className={
-                        subject.isEnabled
-                          ? "bg-emerald-500 hover:bg-emerald-600 text-white"
-                          : "bg-red-500 hover:bg-red-600 text-white"
                       }
                     >
                       {subject.isEnabled ? "Enabled" : "Disabled"}
@@ -779,7 +798,7 @@ export default function ExamsManagement() {
                   type="button"
                   variant="outline"
                   onClick={handleAddSubject}
-                  className="w-full"
+                  className="w-full h-10"
                 >
                   <Plus className="h-4 w-4 mr-2" />
                   Add Subject
@@ -787,10 +806,11 @@ export default function ExamsManagement() {
               </div>
             </div>
 
-            <div className="space-y-2">
+            <div className="rounded-xl border bg-card p-4 md:p-5 space-y-2">
               <Label htmlFor="notes">Notes (Optional)</Label>
               <Input
                 id="notes"
+                className="h-10"
                 value={formData.notes}
                 onChange={(e) =>
                   setFormData({ ...formData, notes: e.target.value })
@@ -799,7 +819,7 @@ export default function ExamsManagement() {
               />
             </div>
 
-            <div className="flex justify-end gap-2 pt-4">
+            <div className="flex justify-end gap-2 pt-2">
               <Button
                 type="button"
                 variant="outline"

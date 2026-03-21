@@ -13,6 +13,8 @@ import { formatDuration } from "../utils/formatDuration";
 import { Summary } from "../models/summary.model";
 import { OPENAI_MODEL_MINI } from "../env";
 
+const MAX_POST_DEDUPE_FILL_ROUNDS = 80;
+
 interface HandlerResult {
   insertedQuestionIds: string[];
 }
@@ -126,6 +128,95 @@ export const handleQuestionGenerationJob = async (
       payload.numQuestions,
       payload.topic,
     );
+  }
+
+  // Deduplicate questions before saving and try to "top up" if we generated fewer
+  // than requested:
+  // - Remove exact duplicates within this batch
+  // - Avoid inserting questions whose text already exists for this subject
+  // - If, after dedupe, we still have fewer than payload.numQuestions, repeat
+  //   subject-knowledge generation until we reach the target or stall (capped).
+  if (generatedQuestions.length) {
+    // Normalize text helper
+    const normalizeText = (text: string | undefined | null) =>
+      (text || "").trim().toLowerCase();
+
+    // Fetch existing questions for this subject
+    const existing = await QuestionModel.find({
+      SubjectId: payload.subjectId,
+    }).select("questionsText");
+
+    const existingTexts = new Set(
+      existing
+        .map((q: any) => normalizeText(q.questionsText))
+        .filter((t) => t.length > 0),
+    );
+
+    const seenInBatch = new Set<string>();
+
+    const dedupeList = (list: any[]) => {
+      const result: any[] = [];
+      for (const q of list) {
+        const key = normalizeText(q.questionsText);
+        if (!key) {
+          result.push(q);
+          continue;
+        }
+        if (existingTexts.has(key)) {
+          continue; // already in DB for this subject
+        }
+        if (seenInBatch.has(key)) {
+          continue; // duplicate within this generation run
+        }
+        seenInBatch.add(key);
+        result.push(q);
+      }
+      return result;
+    };
+
+    // First dedupe the initially generated questions
+    generatedQuestions = dedupeList(generatedQuestions);
+
+    const requestedTotal =
+      payload.numQuestions || generatedQuestions.length;
+    let remainingNeeded = Math.max(
+      0,
+      requestedTotal - generatedQuestions.length,
+    );
+
+    let fillRound = 0;
+    while (remainingNeeded > 0 && fillRound < MAX_POST_DEDUPE_FILL_ROUNDS) {
+      fillRound += 1;
+      try {
+        const extraRaw = await GenerateQuestionsFromSubjectKnowledge(
+          subject.subjectName,
+          entranceExam.entranceExamName,
+          remainingNeeded,
+          payload.topic,
+        );
+
+        if (!extraRaw?.length) {
+          break;
+        }
+
+        const extraDeduped = dedupeList(extraRaw);
+        if (!extraDeduped.length) {
+          break;
+        }
+
+        generatedQuestions = generatedQuestions.concat(extraDeduped);
+        remainingNeeded = Math.max(
+          0,
+          requestedTotal - generatedQuestions.length,
+        );
+      } catch (error) {
+        console.error(
+          "Error generating additional questions to fill requested count:",
+          error,
+        );
+        break;
+      }
+    }
   }
 
   const insertedQuestions = await saveQuestions(generatedQuestions, payload);

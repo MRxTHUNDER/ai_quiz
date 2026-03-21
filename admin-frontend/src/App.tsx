@@ -4,6 +4,7 @@ import {
   Route,
   Navigate,
 } from "react-router-dom";
+import { Toaster } from "react-hot-toast";
 import { useEffect } from "react";
 import Layout from "./layouts/Layout";
 import AdminLogin from "@/pages/AdminLogin";
@@ -35,6 +36,7 @@ function App() {
   }, [checkAuth]);
   return (
     <Router>
+      <Toaster position="top-center" />
       <Routes>
         {/* Public routes without Layout */}
         <Route

@@ -171,13 +171,13 @@ export default function QuestionsList({
 
   if (loading) {
     return (
-      <div className="text-center py-8">Loading questions...</div>
+      <div className="text-center py-10 text-base">Loading questions...</div>
     );
   }
 
   if (questions.length === 0) {
     return (
-      <div className="text-center py-8 text-muted-foreground">
+      <div className="text-center py-10 text-base text-muted-foreground">
         No questions found. Generate some questions to see them here.
       </div>
     );
@@ -187,13 +187,13 @@ export default function QuestionsList({
     <>
       {/* Bulk Actions Bar */}
       {questions.length > 0 && (
-        <div className="flex items-center justify-between p-3 bg-muted/50 rounded-md mb-4 border">
+        <div className="flex items-center justify-between p-4 bg-muted/50 rounded-md mb-4 border">
           <div className="flex items-center gap-3">
             <Checkbox
               checked={allCurrentPageSelected}
               onCheckedChange={handleSelectAll}
             />
-            <span className="text-sm font-medium">
+            <span className="text-base font-medium">
               {allCurrentPageSelected
                 ? `All on page selected (${selectedQuestionIds.size} total)`
                 : selectedQuestionIds.size > 0
@@ -215,25 +215,25 @@ export default function QuestionsList({
         </div>
       )}
 
-      <div className="space-y-4">
+      <div className="space-y-5">
         {questions.map((question, index) => {
           const questionNumber = questionNumberOffset + index + 1;
           const isSelected = selectedQuestionIds.has(question.id);
 
           return (
-            <Card key={question.id} className="p-4">
+            <Card key={question.id} className="p-5">
               {/* Checkbox, Question Number, and Action Buttons */}
-              <div className="flex items-start gap-3 mb-3">
+              <div className="flex items-start gap-3 mb-4">
                 <Checkbox
                   checked={isSelected}
                   onCheckedChange={(checked) =>
                     handleQuestionSelect(question.id, checked as boolean)
                   }
-                  className="mt-1"
+                  className="mt-1 size-5"
                 />
                 <div className="flex-1">
                   <div className="flex items-center justify-between gap-2 mb-2">
-                    <span className="font-semibold text-lg text-primary">
+                    <span className="font-semibold text-xl text-primary">
                       Q{questionNumber}.
                     </span>
                     {/* Edit and Delete Buttons */}
@@ -260,17 +260,17 @@ export default function QuestionsList({
                 </div>
               </div>
 
-              <div className="space-y-3 pr-2">
+              <div className="space-y-4 pr-2">
                 <div>
-                  <p className="font-medium text-sm text-muted-foreground mb-1">
+                  <p className="font-medium text-base text-muted-foreground mb-2">
                     Question
                   </p>
-                  <div className="text-base">
+                  <div className="text-lg leading-relaxed">
                     <MathRenderer text={question.questionsText} />
                   </div>
                 </div>
                 <div>
-                  <p className="font-medium text-sm text-muted-foreground mb-2">
+                  <p className="font-medium text-base text-muted-foreground mb-2">
                     Options
                   </p>
                   <div className="space-y-2">
@@ -280,17 +280,17 @@ export default function QuestionsList({
                       return (
                         <div
                           key={idx}
-                          className={`flex items-start gap-2 ${isCorrect ? "text-green-600 font-medium" : ""
+                          className={`flex items-start gap-2 text-base ${isCorrect ? "text-green-600 font-medium" : ""
                             }`}
                         >
-                          <span className="font-semibold min-w-[20px]">
+                          <span className="font-semibold min-w-[24px]">
                             {optionLetter}.
                           </span>
                           <span className="flex-1">
                             <MathRenderer text={option} />
                           </span>
                           {isCorrect && (
-                            <span className="text-xs text-green-600 font-medium">
+                            <span className="text-sm text-green-600 font-medium">
                               (Correct)
                             </span>
                           )}
@@ -299,7 +299,7 @@ export default function QuestionsList({
                     })}
                   </div>
                 </div>
-                <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t pb-2">
+                <div className="flex items-center justify-between text-sm text-muted-foreground pt-3 border-t pb-2">
                   <span>
                     <span className="font-medium">Entrance Exam:</span>{" "}
                     {question.entranceExam?.name || "N/A"}

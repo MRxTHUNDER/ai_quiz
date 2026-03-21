@@ -16,6 +16,7 @@ import { usersApi, User } from "@/lib/users";
 import { getAllEntranceExams, EntranceExam } from "@/lib/entranceExams";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Card,
   CardContent,
@@ -179,16 +180,18 @@ function UsersManagement() {
   };
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="container mx-auto p-6 max-w-7xl w-full space-y-6">
       <div>
-        <h1 className="text-3xl font-bold text-gray-900">Users Management</h1>
-        <p className="text-gray-600 mt-2">
+        <h1 className="text-xl font-semibold tracking-tight">
+          Users Management
+        </h1>
+        <p className="text-base text-muted-foreground mt-2">
           View and manage all users and their test progress
         </p>
       </div>
 
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+        <div className="p-4 rounded-md text-base bg-red-50 text-red-800 border border-red-200">
           {error}
         </div>
       )}
@@ -197,8 +200,8 @@ function UsersManagement() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle>All Users</CardTitle>
-              <CardDescription>
+              <CardTitle className="text-xl">All Users</CardTitle>
+              <CardDescription className="text-base">
                 Search and filter users by name or email
               </CardDescription>
             </div>
@@ -206,7 +209,7 @@ function UsersManagement() {
               onClick={handleExportToExcel}
               disabled={exporting}
               variant="outline"
-              className="gap-2"
+              className="gap-2 text-base h-10"
             >
               {exporting ? (
                 <>
@@ -222,29 +225,31 @@ function UsersManagement() {
             </Button>
           </div>
         </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSearch} className="mb-6 space-y-4">
+        <CardContent className="space-y-6 text-base">
+          <form onSubmit={handleSearch} className="space-y-4">
             {/* Search by name or email */}
             <div className="flex gap-2">
               <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                 <Input
                   type="text"
                   placeholder="Search by name or email..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
+                  className="pl-10 h-10 text-base"
                 />
               </div>
-              <Button type="submit">Search</Button>
+              <Button type="submit" className="h-10 text-base">
+                Search
+              </Button>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_1fr_auto] gap-4">
               <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
-                  <Filter className="h-4 w-4" />
+                <Label className="text-base font-medium flex items-center gap-2">
+                  <Filter className="h-4 w-4 shrink-0" />
                   Exam/Quiz Type
-                </label>
+                </Label>
                 <Select
                   value={selectedExam ? selectedExam : "all"}
                   onValueChange={(value) => {
@@ -252,7 +257,7 @@ function UsersManagement() {
                   }}
                   disabled={loadingExams}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="h-10 text-base">
                     <SelectValue placeholder="All Exams/Quizzes" />
                   </SelectTrigger>
                   <SelectContent>
@@ -267,24 +272,25 @@ function UsersManagement() {
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
-                  <Calendar className="h-4 w-4" />
+                <Label className="text-base font-medium flex items-center gap-2">
+                  <Calendar className="h-4 w-4 shrink-0" />
                   Start Date
-                </label>
+                </Label>
                 <Input
                   type="date"
                   value={startDate}
                   onChange={(e) => {
                     setStartDate(e.target.value);
                   }}
+                  className="h-10 text-base"
                 />
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
-                  <Calendar className="h-4 w-4" />
+                <Label className="text-base font-medium flex items-center gap-2">
+                  <Calendar className="h-4 w-4 shrink-0" />
                   End Date
-                </label>
+                </Label>
                 <Input
                   type="date"
                   value={endDate}
@@ -292,19 +298,20 @@ function UsersManagement() {
                     setEndDate(e.target.value);
                   }}
                   min={startDate || undefined}
+                  className="h-10 text-base"
                 />
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700 flex items-center gap-2 opacity-0 pointer-events-none">
+                <Label className="text-base font-medium flex items-center gap-2 opacity-0 pointer-events-none">
                   <Filter className="h-4 w-4" />
                   Filter
-                </label>
+                </Label>
                 <Button
                   type="button"
                   onClick={handleApplyFilters}
                   variant="outline"
-                  className="h-9 w-20"
+                  className="h-10 w-20 text-base"
                 >
                   <Filter className="h-4 w-4 mr-1.5" />
                   Filter
@@ -318,7 +325,7 @@ function UsersManagement() {
                   type="button"
                   variant="outline"
                   onClick={handleClearFilters}
-                  className="gap-2"
+                  className="gap-2 h-10 text-base"
                 >
                   <X className="h-4 w-4" />
                   Clear All Filters
@@ -329,12 +336,12 @@ function UsersManagement() {
 
           {loading ? (
             <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
             </div>
           ) : users.length === 0 ? (
             <div className="text-center py-12">
-              <Users className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-600">No users found</p>
+              <Users className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
+              <p className="text-base text-muted-foreground">No users found</p>
             </div>
           ) : (
             <>
@@ -343,36 +350,36 @@ function UsersManagement() {
                   <div
                     key={user._id}
                     onClick={() => handleUserClick(user._id)}
-                    className="border rounded-lg p-4 hover:bg-gray-50 cursor-pointer transition-colors"
+                    className="border rounded-lg p-5 hover:bg-muted/50 cursor-pointer transition-colors"
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-4">
-                        <div className="h-12 w-12 rounded-full bg-blue-100 flex items-center justify-center">
-                          <UserCheck className="h-6 w-6 text-blue-600" />
+                        <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                          <UserCheck className="h-6 w-6 text-primary" />
                         </div>
                         <div>
-                          <h3 className="font-semibold text-gray-900">
+                          <h3 className="text-base font-semibold">
                             {user.firstname} {user.lastname || ""}
                           </h3>
-                          <div className="flex items-center gap-4 mt-1 text-sm text-gray-600">
+                          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1 text-base text-muted-foreground">
                             <div className="flex items-center gap-1">
-                              <Mail className="h-4 w-4" />
+                              <Mail className="h-4 w-4 shrink-0" />
                               {user.email}
                             </div>
                             {user.phoneNumber && (
                               <div className="flex items-center gap-1">
-                                <Phone className="h-4 w-4" />
+                                <Phone className="h-4 w-4 shrink-0" />
                                 {user.phoneNumber}
                               </div>
                             )}
                             <div className="flex items-center gap-1">
-                              <Calendar className="h-4 w-4" />
+                              <Calendar className="h-4 w-4 shrink-0" />
                               {new Date(user.createdAt).toLocaleDateString()}
                             </div>
                           </div>
                         </div>
                       </div>
-                      <Button variant="outline" size="sm">
+                      <Button variant="outline" size="sm" className="text-base">
                         View Details
                       </Button>
                     </div>
@@ -382,8 +389,8 @@ function UsersManagement() {
 
               {/* Pagination */}
               {pagination.totalPages > 1 && (
-                <div className="flex items-center justify-between mt-6 pt-4 border-t">
-                  <div className="text-sm text-gray-600">
+                <div className="flex items-center justify-between pt-4 border-t">
+                  <div className="text-base text-muted-foreground">
                     Showing {(currentPage - 1) * pagination.limit + 1} to{" "}
                     {Math.min(
                       currentPage * pagination.limit,
@@ -395,6 +402,7 @@ function UsersManagement() {
                     <Button
                       variant="outline"
                       size="sm"
+                      className="text-base"
                       onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                       disabled={!pagination.hasPrevPage}
                     >
@@ -403,6 +411,7 @@ function UsersManagement() {
                     <Button
                       variant="outline"
                       size="sm"
+                      className="text-base"
                       onClick={() =>
                         setCurrentPage((p) =>
                           Math.min(pagination.totalPages, p + 1)

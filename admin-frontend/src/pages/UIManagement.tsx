@@ -258,7 +258,7 @@ export default function UIManagement() {
 
   if (loading) {
     return (
-      <div className="container mx-auto p-6 max-w-4xl">
+      <div className="container mx-auto p-6 max-w-7xl w-full">
         <Card>
           <CardContent className="flex items-center justify-center py-12">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -269,25 +269,25 @@ export default function UIManagement() {
   }
 
   return (
-    <div className="container mx-auto p-6 max-w-4xl">
+    <div className="container mx-auto p-6 max-w-7xl w-full">
       <Card>
         <CardHeader>
-          <CardTitle>UI Management</CardTitle>
-          <CardDescription>
+          <CardTitle className="text-xl">UI Management</CardTitle>
+          <CardDescription className="text-base">
             Control visibility and access to UI components and pages for users
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6">
+        <CardContent className="space-y-6 text-base">
           {/* Success Message */}
           {success && (
-            <div className="p-3 rounded-md bg-green-50 text-green-800 text-sm">
+            <div className="p-3 rounded-md bg-green-50 text-green-800">
               {success}
             </div>
           )}
 
           {/* Error Message */}
           {error && (
-            <div className="p-3 rounded-md bg-red-50 text-red-800 text-sm">
+            <div className="p-3 rounded-md bg-red-50 text-red-800">
               {error}
             </div>
           )}
@@ -299,7 +299,7 @@ export default function UIManagement() {
                 <Label className="text-base font-semibold">
                   Questions Page
                 </Label>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-base text-muted-foreground">
                   Enable or disable the Questions page in the user frontend.
                   When disabled, users will not be able to access or see the
                   Questions tab.
@@ -341,7 +341,7 @@ export default function UIManagement() {
                 <Label className="text-base font-semibold">
                   Featured Exams (Home Page Text)
                 </Label>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-base text-muted-foreground">
                   Configure up to four entrance exams that appear in the
                   marketing text on the user Home page (e.g.{" "}
                   <span className="font-semibold">
@@ -482,7 +482,7 @@ export default function UIManagement() {
                       ) as HTMLInputElement;
                       if (fileInput) fileInput.value = "";
                     }}
-                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm ring-offset-background focus:outline-none focus:ring-1 focus:ring-ring"
+                    className="flex h-10 w-full rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-sm ring-offset-background focus:outline-none focus:ring-1 focus:ring-ring"
                   >
                     <option value="">Select an entrance exam</option>
                     {exams.map((exam) => (
@@ -500,7 +500,7 @@ export default function UIManagement() {
                       <Label htmlFor="exam-description">Description Text</Label>
                       <textarea
                         id="exam-description"
-                        className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                        className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-base ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                         value={examDescription}
                         onChange={(e) => setExamDescription(e.target.value)}
                         disabled={uploadingBanner}
@@ -512,7 +512,7 @@ export default function UIManagement() {
                       <div className="flex flex-wrap gap-3 p-3 border rounded-md bg-secondary/20">
                         {exams.find((e) => e._id === selectedExamId)?.subjects
                           .length === 0 && (
-                          <span className="text-sm text-muted-foreground">
+                              <span className="text-base text-muted-foreground">
                             No subjects found for this exam.
                           </span>
                         )}
@@ -556,7 +556,7 @@ export default function UIManagement() {
                                 />
                                 <Label
                                   htmlFor={`subject-${selectedExamId}-${subjectName}`}
-                                  className={`text-sm cursor-pointer ${!isSelected && examBannerSubjects.length >= 3 ? "opacity-50" : ""}`}
+                                  className={`text-base cursor-pointer ${!isSelected && examBannerSubjects.length >= 3 ? "opacity-50" : ""}`}
                                 >
                                   {subjectName}
                                 </Label>
@@ -603,7 +603,7 @@ export default function UIManagement() {
 
                 {bannerStatus.type && (
                   <div
-                    className={`p-3 rounded-md text-sm ${
+                    className={`p-3 rounded-md ${
                       bannerStatus.type === "success"
                         ? "bg-green-50 text-green-800"
                         : "bg-red-50 text-red-800"
@@ -638,7 +638,7 @@ export default function UIManagement() {
 
           {/* Info Box */}
           <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-            <p className="text-sm text-blue-800">
+            <p className="text-base text-blue-800">
               <strong>Note:</strong> Changes take effect immediately. When a
               page is disabled, users will not see the navigation link and
               cannot access the page even if they know the URL.

@@ -238,13 +238,14 @@ function TestResult() {
                         {answer.Options.map((option, optIndex) => {
                           const optionLabel = String.fromCharCode(65 + optIndex);
                           const isSelected = answer.selectedOption === optionLabel;
-                          const isCorrect = answer.correctOption === optionLabel;
+                          // correctOption from API is the option text (e.g. "Ionic"), not the letter
+                          const isCorrectOption = answer.correctOption === option;
 
                           return (
                             <div
                               key={optIndex}
                               className={`p-3 rounded-lg border-2 ${
-                                isCorrect
+                                isCorrectOption
                                   ? "border-green-500 bg-green-50"
                                   : isSelected
                                   ? "border-red-500 bg-red-50"
@@ -258,10 +259,10 @@ function TestResult() {
                                 <span>
                                   <MathRenderer text={option} />
                                 </span>
-                                {isCorrect && (
+                                {isCorrectOption && (
                                   <CheckCircle2 className="h-5 w-5 text-green-600 ml-auto" />
                                 )}
-                                {isSelected && !isCorrect && (
+                                {isSelected && !isCorrectOption && (
                                   <XCircle className="h-5 w-5 text-red-600 ml-auto" />
                                 )}
                               </div>
@@ -280,7 +281,11 @@ function TestResult() {
                         <div>
                           <span className="text-gray-600">Correct Answer: </span>
                           <span className="font-medium text-green-600">
-                            {answer.correctOption}
+                            {(() => {
+                              const idx = answer.Options.indexOf(answer.correctOption);
+                              const letter = idx >= 0 ? String.fromCharCode(65 + idx) : null;
+                              return letter != null ? `${letter}) ${answer.correctOption}` : answer.correctOption;
+                            })()}
                           </span>
                         </div>
                       </div>

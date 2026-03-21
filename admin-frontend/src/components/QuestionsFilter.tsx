@@ -84,14 +84,14 @@ export default function QuestionsFilter({
 
   return (
     <div className="flex flex-wrap items-end gap-4 p-4 bg-muted/50 rounded-lg border">
-      <div className="flex-1 min-w-[200px]">
-        <Label htmlFor="filter-entrance-exam">Entrance Exam</Label>
+      <div className="flex-1 min-w-[220px]">
+        <Label htmlFor="filter-entrance-exam" className="text-base">Entrance Exam</Label>
         <select
           id="filter-entrance-exam"
           value={selectedEntranceExamId}
           onChange={(e) => onEntranceExamChange(e.target.value)}
           disabled={loadingExams}
-          className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm ring-offset-background focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 mt-1"
+          className="flex h-10 w-full rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-sm ring-offset-background focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 mt-1"
         >
           <option value="">All Entrance Exams</option>
           {entranceExams.map((exam) => (
@@ -102,14 +102,14 @@ export default function QuestionsFilter({
         </select>
       </div>
 
-      <div className="flex-1 min-w-[200px]">
-        <Label htmlFor="filter-subject">Subject</Label>
+      <div className="flex-1 min-w-[220px]">
+        <Label htmlFor="filter-subject" className="text-base">Subject</Label>
         <select
           id="filter-subject"
           value={selectedSubjectId}
           onChange={(e) => onSubjectChange(e.target.value)}
           disabled={!selectedEntranceExamId || loadingSubjects}
-          className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm ring-offset-background focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 mt-1"
+          className="flex h-10 w-full rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-sm ring-offset-background focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 mt-1"
         >
           <option value="">
             {selectedEntranceExamId
@@ -127,7 +127,7 @@ export default function QuestionsFilter({
       </div>
 
       {hasFilters && (
-        <Button variant="outline" onClick={onReset} className="h-9">
+        <Button variant="outline" onClick={onReset} className="h-10 text-base">
           Clear Filters
         </Button>
       )}

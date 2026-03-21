@@ -146,8 +146,41 @@ export const GetUserTests = async (req: Request, res: Response) => {
       .skip(skip)
       .limit(limit)
       .sort({ createdAt: -1 });
+    // Filter out tests that have no linked questions in the database or totalQuestions is falsy
+    const testsWithQuestions = await (async () => {
+      if (!tests.length) return [] as typeof tests;
 
-    const formattedTests = tests.map((test) => {
+      // Collect all question IDs from these tests
+      const allQuestionIds = tests.flatMap((test) =>
+        ((test.questions as any[]) || []).map((q: any) => q.toString()),
+      );
+
+      if (!allQuestionIds.length) {
+        return [] as typeof tests;
+      }
+
+      // Find which question IDs actually exist
+      const existingQuestions = await QuestionModel.find({
+        _id: { $in: allQuestionIds },
+      }).select("_id");
+
+      const existingIdSet = new Set(
+        existingQuestions.map((q) => q._id.toString()),
+      );
+
+      // Keep only tests that have at least one existing question and a positive totalQuestions
+      return tests.filter((test) => {
+        if (!test.totalQuestions || test.totalQuestions <= 0) {
+          return false;
+        }
+        const questionIds = (test.questions as any[]) || [];
+        return questionIds.some((q: any) =>
+          existingIdSet.has(q.toString()),
+        );
+      });
+    })();
+
+    const formattedTests = testsWithQuestions.map((test) => {
       // Handle populated vs unpopulated entranceExamId
       const entranceExam = test.entranceExamId as any;
       const entranceExamId =
@@ -176,7 +209,8 @@ export const GetUserTests = async (req: Request, res: Response) => {
       };
     });
 
-    const totalPages = Math.ceil(totalCount / limit);
+    const filteredCount = testsWithQuestions.length;
+    const totalPages = Math.ceil(filteredCount / limit);
     const hasNextPage = page < totalPages;
     const hasPrevPage = page > 1;
 
@@ -185,12 +219,12 @@ export const GetUserTests = async (req: Request, res: Response) => {
       pagination: {
         currentPage: page,
         limit: limit,
-        totalCount: totalCount,
+        totalCount: filteredCount,
         totalPages: totalPages,
         hasNextPage: hasNextPage,
         hasPrevPage: hasPrevPage,
       },
-      count: tests.length,
+      count: testsWithQuestions.length,
       data: formattedTests,
     });
   } catch (error) {
@@ -766,7 +800,7 @@ export const EndTest = async (req: Request, res: Response) => {
     const test = await TestModel.findById(attempt.testId)
       .populate({
         path: "questions",
-        select: "_id correctOption",
+        select: "_id correctOption Options",
       })
       .populate({
         path: "entranceExamId",
@@ -789,10 +823,15 @@ export const EndTest = async (req: Request, res: Response) => {
       unansweredMarks: 0,
     };
 
-    // Create a map of questionId to correctOption for quick lookup
+    // Create a map of questionId to correct option LETTER (A/B/C/D) for quick lookup.
+    // Frontend submits selectedOption as letter; DB stores correctOption as option text.
     const correctAnswersMap = new Map();
     (test.questions as any[]).forEach((question: any) => {
-      correctAnswersMap.set(question._id.toString(), question.correctOption);
+      const options = question.Options || [];
+      const idx = options.indexOf(question.correctOption);
+      const correctLetter =
+        idx >= 0 ? String.fromCharCode(65 + idx) : null;
+      correctAnswersMap.set(question._id.toString(), correctLetter);
     });
 
     // Calculate scores for each answer
@@ -800,8 +839,9 @@ export const EndTest = async (req: Request, res: Response) => {
     let incorrectCount = 0;
 
     attempt.answers.forEach((answer: any) => {
-      const correctOption = correctAnswersMap.get(answer.questionId.toString());
-      const isCorrect = answer.selectedOption === correctOption;
+      const correctLetter = correctAnswersMap.get(answer.questionId.toString());
+      const isCorrect =
+        correctLetter != null && answer.selectedOption === correctLetter;
 
       answer.isCorrect = isCorrect;
 
@@ -910,7 +950,7 @@ export const AbandonTest = async (req: Request, res: Response) => {
       const test = await TestModel.findById(attempt.testId)
         .populate({
           path: "questions",
-          select: "_id correctOption",
+          select: "_id correctOption Options",
         })
         .populate({
           path: "entranceExamId",
@@ -928,19 +968,21 @@ export const AbandonTest = async (req: Request, res: Response) => {
 
         const correctAnswersMap = new Map();
         (test.questions as any[]).forEach((question: any) => {
-          correctAnswersMap.set(
-            question._id.toString(),
-            question.correctOption,
-          );
+          const options = question.Options || [];
+          const idx = options.indexOf(question.correctOption);
+          const correctLetter =
+            idx >= 0 ? String.fromCharCode(65 + idx) : null;
+          correctAnswersMap.set(question._id.toString(), correctLetter);
         });
 
         let correctCount = 0;
         let incorrectCount = 0;
         attempt.answers.forEach((answer: any) => {
-          const correctOption = correctAnswersMap.get(
+          const correctLetter = correctAnswersMap.get(
             answer.questionId.toString(),
           );
-          answer.isCorrect = answer.selectedOption === correctOption;
+          answer.isCorrect =
+            correctLetter != null && answer.selectedOption === correctLetter;
           if (answer.isCorrect) {
             correctCount++;
           } else {
@@ -1026,7 +1068,7 @@ export const TimeUpTest = async (req: Request, res: Response) => {
     const test = await TestModel.findById(attempt.testId)
       .populate({
         path: "questions",
-        select: "_id correctOption",
+        select: "_id correctOption Options",
       })
       .populate({
         path: "entranceExamId",
@@ -1049,10 +1091,14 @@ export const TimeUpTest = async (req: Request, res: Response) => {
       unansweredMarks: 0,
     };
 
-    // Create a map of questionId to correctOption
+    // Create a map of questionId to correct option LETTER (A/B/C/D).
     const correctAnswersMap = new Map();
     (test.questions as any[]).forEach((question: any) => {
-      correctAnswersMap.set(question._id.toString(), question.correctOption);
+      const options = question.Options || [];
+      const idx = options.indexOf(question.correctOption);
+      const correctLetter =
+        idx >= 0 ? String.fromCharCode(65 + idx) : null;
+      correctAnswersMap.set(question._id.toString(), correctLetter);
     });
 
     // Calculate scores for answered questions
@@ -1060,8 +1106,9 @@ export const TimeUpTest = async (req: Request, res: Response) => {
     let incorrectCount = 0;
 
     attempt.answers.forEach((answer: any) => {
-      const correctOption = correctAnswersMap.get(answer.questionId.toString());
-      const isCorrect = answer.selectedOption === correctOption;
+      const correctLetter = correctAnswersMap.get(answer.questionId.toString());
+      const isCorrect =
+        correctLetter != null && answer.selectedOption === correctLetter;
       answer.isCorrect = isCorrect;
 
       if (isCorrect) {
@@ -1196,22 +1243,31 @@ export const GetTestResult = async (req: Request, res: Response) => {
       });
     });
 
-    // Map answers with question details
+    // Map answers with question details. Recompute isCorrect so it matches
+    // grading logic (compare selectedOption letter to correct option letter),
+    // fixing both new and old attempts that may have wrong stored isCorrect.
     const detailedAnswers = attempt.answers.map((answer: any) => {
       const question = questionsMap.get(answer.questionId.toString());
+      const options = question?.Options || [];
+      const idx =
+        options.indexOf(question?.correctOption) ?? -1;
+      const correctLetter =
+        idx >= 0 ? String.fromCharCode(65 + idx) : null;
+      const isCorrect =
+        correctLetter != null && answer.selectedOption === correctLetter;
       return {
         questionId: answer.questionId.toString(),
         questionText: question?.questionsText || "Question not found",
-        Options: question?.Options || [],
+        Options: options,
         selectedOption: answer.selectedOption,
         correctOption: question?.correctOption || "",
-        isCorrect: answer.isCorrect,
+        isCorrect,
       };
     });
 
-    // Calculate metrics
+    // Calculate metrics from recomputed isCorrect so summary matches per-question status
     const attemptedCount = attempt.answers.length;
-    const correctCount = attempt.correctCount || 0;
+    const correctCount = detailedAnswers.filter((a: any) => a.isCorrect).length;
     const incorrectCount = attemptedCount - correctCount;
     const unansweredCount = attempt.totalQuestions - attemptedCount;
     // Calculate percentage: (correctCount / totalQuestions) * 100, rounded to 2 decimal places

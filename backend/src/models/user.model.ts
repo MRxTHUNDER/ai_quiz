@@ -33,7 +33,9 @@ const userSchema = new Schema(
 
     phoneNumber: {
       type: String,
-      required: true,
+      required: function (this: any) {
+        return this.role === UserRole.USER;
+      },
       trim: true,
       maxLength: 20,
     },
@@ -41,7 +43,9 @@ const userSchema = new Schema(
     entranceExamPreference: {
       type: Schema.Types.ObjectId,
       ref: "EntranceExam",
-      required: true,
+      required: function (this: any) {
+        return this.role === UserRole.USER;
+      },
     },
 
     role: {

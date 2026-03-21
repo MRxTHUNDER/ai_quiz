@@ -1,4 +1,5 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
+import { Toaster } from "react-hot-toast";
 import { useEffect, useState } from "react";
 import Layout from "./layouts/Layout";
 import Home from "./pages/Home";
@@ -14,6 +15,7 @@ import Questions from "./pages/Questions";
 import { useAuthStore } from "./store/useAuthStore";
 import UserAuthRedirect from "./components/UserAuthRedirect";
 import ProtectedRoute from "./components/ProtectedRoute";
+import ScrollToTop from "./components/ScrollToTop";
 import { getUIFlags, type UIFlags } from "./lib/uiFlags";
 
 function App() {
@@ -38,6 +40,8 @@ function App() {
 
   return (
     <Router>
+      <Toaster position="top-center" />
+      <ScrollToTop />
       <Routes>
         <Route
           path="/signup"

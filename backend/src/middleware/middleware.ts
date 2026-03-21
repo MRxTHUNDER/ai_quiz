@@ -30,12 +30,11 @@ declare global {
 export const adminAuthMiddleware = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   try {
     const adminToken = req.cookies.adminToken;
     const userToken = req.cookies.userToken;
-
 
     // Reject if adminToken is not present
     if (!adminToken) {
@@ -49,7 +48,7 @@ export const adminAuthMiddleware = async (
     // Warn if userToken is present (shouldn't be used for admin routes)
     if (userToken) {
       console.warn(
-        "[adminAuthMiddleware] User token present but ignored for admin route"
+        "[adminAuthMiddleware] User token present but ignored for admin route",
       );
     }
 
@@ -78,7 +77,7 @@ export const adminAuthMiddleware = async (
     if (!user) {
       console.error(
         "[adminAuthMiddleware] User not found for userId:",
-        decoded.userId
+        decoded.userId,
       );
       return res.status(404).json({ message: "User not found" });
     }
@@ -89,7 +88,7 @@ export const adminAuthMiddleware = async (
         "[adminAuthMiddleware] User is not an admin:",
         user.email,
         "Role:",
-        user.role
+        user.role,
       );
       return res.status(403).json({
         message: "Admin privileges required",
@@ -139,7 +138,7 @@ export const adminAuthMiddleware = async (
 export const userAuthMiddleware = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   try {
     const userToken = req.cookies.userToken;
@@ -153,14 +152,6 @@ export const userAuthMiddleware = async (
         code: "NO_USER_TOKEN",
       });
     }
-
-    // Warn if adminToken is present (shouldn't be used for user routes)
-    if (adminToken) {
-      console.warn(
-        "[userAuthMiddleware] Admin token present but ignored for user route"
-      );
-    }
-
     // Verify user token
     let decoded;
     try {
@@ -186,7 +177,7 @@ export const userAuthMiddleware = async (
     if (!user) {
       console.error(
         "[userAuthMiddleware] User not found for userId:",
-        decoded.userId
+        decoded.userId,
       );
       return res.status(404).json({ message: "User not found" });
     }
@@ -195,7 +186,7 @@ export const userAuthMiddleware = async (
     if (user.role === UserRole.ADMIN) {
       console.error(
         "[userAuthMiddleware] Admin user attempted to use user route:",
-        user.email
+        user.email,
       );
       return res.status(403).json({
         message: "Admin users must use the admin portal",

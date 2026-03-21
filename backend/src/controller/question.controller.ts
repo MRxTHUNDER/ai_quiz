@@ -5,6 +5,7 @@ import { QuestionModel } from "../models/questions.model";
 import { Summary } from "../models/summary.model";
 import { Subject } from "../models/subject.model";
 import { EntranceExam } from "../models/entranceExam.model";
+import { User } from "../models/user.model";
 import { GenerateQuestionsFromSubjectKnowledge } from "../service/generateQuestionFromSubject";
 import { UserRole } from "../types/types";
 
@@ -144,26 +145,6 @@ export const GetQuestionsByCreator = async (req: Request, res: Response) => {
     const currentUserId = req.userId;
     const currentUserRole = req.user?.role;
 
-    // If no targetUserId provided, use current user's ID
-    const creatorId = targetUserId || currentUserId;
-
-    if (!creatorId) {
-      res.status(400).json({
-        success: false,
-        message: "User ID is required",
-      });
-      return;
-    }
-
-    // Users can only see their own questions, admins can see anyone's
-    if (currentUserRole !== UserRole.ADMIN && creatorId !== currentUserId) {
-      res.status(403).json({
-        success: false,
-        message: "You can only view your own questions",
-      });
-      return;
-    }
-
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
     const limit = 20; // Fixed limit of 20 questions per page
     const skip = (page - 1) * limit;
@@ -173,9 +154,58 @@ export const GetQuestionsByCreator = async (req: Request, res: Response) => {
     const subjectId = req.query.subjectId as string | undefined;
 
     // Build query filter
-    const queryFilter: any = {
-      createdBy: creatorId,
-    };
+    const queryFilter: any = {};
+
+    // Determine which creators' questions to include
+    if (currentUserRole === UserRole.ADMIN) {
+      if (targetUserId) {
+        // Admin viewing a specific creator's questions
+        queryFilter.createdBy = targetUserId;
+      } else {
+        // Admin viewing all admin-generated questions
+        const adminUsers = await User.find({ role: UserRole.ADMIN }).select("_id");
+        const adminIds = adminUsers.map((u) => u._id);
+
+        if (adminIds.length === 0) {
+          return res.status(200).json({
+            success: true,
+            pagination: {
+              currentPage: page,
+              limit: limit,
+              totalCount: 0,
+              totalPages: 0,
+              hasNextPage: false,
+              hasPrevPage: false,
+            },
+            count: 0,
+            data: [],
+          });
+        }
+
+        queryFilter.createdBy = { $in: adminIds };
+      }
+    } else {
+      // Non-admins (if ever allowed here) can only see their own questions
+      const creatorId = targetUserId || currentUserId;
+
+      if (!creatorId) {
+        res.status(400).json({
+          success: false,
+          message: "User ID is required",
+        });
+        return;
+      }
+
+      if (creatorId !== currentUserId) {
+        res.status(403).json({
+          success: false,
+          message: "You can only view your own questions",
+        });
+        return;
+      }
+
+      queryFilter.createdBy = creatorId;
+    }
 
     // If entranceExamId is provided, we need to filter by subjects in that exam
     let subjectObjectIds: mongoose.Types.ObjectId[] = [];

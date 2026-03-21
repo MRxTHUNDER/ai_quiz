@@ -9,10 +9,11 @@ import {
   OPENAI_MODEL_MINI,
   SIMILARITY_THRESHOLD,
 } from "../env";
+import { tryParseJsonWithRepair } from "../utils/jsonParseWithRepair";
 
 const MAX_RETRIES = 3;
 
-const BATCH_SIZE_QUESTIONS = 50; // Questions per batch
+const BATCH_SIZE_QUESTIONS = 20; // Questions per batch (aligned with subject-only generation)
 const MAX_BATCHES = 10; // Maximum number of parallel batches
 
 const BATCH_DELAY = 5000; // 5 seconds between waves
@@ -232,57 +233,44 @@ const cleanJsonOutput = (rawOutput: string): string => {
 };
 
 /**
- * Parse JSON with better error handling and recovery
+ * Parse JSON: JSON.parse → jsonrepair → LaTeX escape heuristics (same order as subject flow).
  */
 const parseJsonSafely = (jsonString: string): any => {
-  try {
-    // First try direct parsing
-    return JSON.parse(jsonString);
-  } catch (error: any) {
-    // If that fails, try fixing common issues
-    try {
-      const fixed = fixJsonEscaping(jsonString);
-      return JSON.parse(fixed);
-    } catch (secondError) {
-      // If still failing, try a more aggressive fix
-      try {
-        // Replace problematic LaTeX patterns more aggressively
-        let aggressiveFix = jsonString;
+  const logPosition = (err: unknown) => {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes("position")) {
+      const match = msg.match(/position (\d+)/);
+      if (match) {
+        const pos = parseInt(match[1], 10);
+        const start = Math.max(0, pos - 50);
+        const end = Math.min(jsonString.length, pos + 50);
+        console.error(
+          `JSON error at position ${pos}:`,
+          jsonString.substring(start, end),
+        );
+      }
+    }
+  };
 
-        // Fix \( and \) patterns - these are invalid JSON escape sequences
-        // Need to escape the backslash: \( becomes \\(
+  try {
+    return tryParseJsonWithRepair(jsonString);
+  } catch (firstError) {
+    try {
+      return tryParseJsonWithRepair(fixJsonEscaping(jsonString));
+    } catch (secondError) {
+      try {
+        let aggressiveFix = jsonString;
         aggressiveFix = aggressiveFix.replace(/\\\(/g, "\\\\(");
         aggressiveFix = aggressiveFix.replace(/\\\)/g, "\\\\)");
-
-        // Fix \[ and \] patterns
         aggressiveFix = aggressiveFix.replace(/\\\[/g, "\\\\[");
         aggressiveFix = aggressiveFix.replace(/\\\]/g, "\\\\]");
-
-        // Fix \{ and \} patterns
         aggressiveFix = aggressiveFix.replace(/\\\{/g, "\\\\{");
         aggressiveFix = aggressiveFix.replace(/\\\}/g, "\\\\}");
-
-        // Fix any other backslash + special char that's not a valid escape
-        // Valid JSON escapes: \", \\, \/, \b, \f, \n, \r, \t, \uXXXX
-        // We want to escape backslashes before invalid escape sequences
         aggressiveFix = aggressiveFix.replace(/\\(?![\\"/bfnrtu])/g, "\\\\");
-
-        return JSON.parse(aggressiveFix);
+        return tryParseJsonWithRepair(aggressiveFix);
       } catch (thirdError) {
-        // Log the error position for debugging
-        if (error.message && error.message.includes("position")) {
-          const match = error.message.match(/position (\d+)/);
-          if (match) {
-            const pos = parseInt(match[1]);
-            const start = Math.max(0, pos - 50);
-            const end = Math.min(jsonString.length, pos + 50);
-            console.error(
-              `JSON error at position ${pos}:`,
-              jsonString.substring(start, end),
-            );
-          }
-        }
-        throw error; // Throw original error
+        logPosition(firstError);
+        throw firstError instanceof Error ? firstError : new Error(String(firstError));
       }
     }
   }
@@ -321,14 +309,22 @@ ${baseInstructions}
 
 COMPETITIVE ENTRANCE EXAM QUESTION STANDARDS:
 - These are ENTRANCE EXAM-LEVEL questions for competitive examinations (NEET, JEE, CUET, CLAT, CAT, etc.)
-- Questions must test DEEP CONCEPTUAL UNDERSTANDING, not just memorization
-- Include questions that require APPLICATION of concepts to solve complex problems
-- Mix of difficulty levels: 30% easy (basic concepts), 50% medium (application), 20% challenging (advanced analysis)
-- Questions should be CLEAR, UNAMBIGUOUS, and professionally worded
-- Each question should test a specific concept or skill relevant to entrance exams
-- Avoid trivial, overly simple, or elementary-level questions
-- Include questions that require multi-step reasoning, critical thinking, and problem-solving
-- Questions must match the complexity and rigor of actual competitive entrance exam questions
+- Questions must test DEEP CONCEPTUAL UNDERSTANDING, not just memorization.
+- Include questions that require APPLICATION of concepts to solve complex, multi-step problems.
+- Target difficulty mix: at most 20% easy (quick recap), around 50% medium (non-trivial application), and at least 30% challenging (multi-step analysis or combining multiple concepts).
+- Questions should be CLEAR, UNAMBIGUOUS, and professionally worded.
+- Each question should test a specific concept or skill relevant to entrance exams.
+- Avoid trivial, overly simple, or elementary-level questions (for example, questions that only ask for direct formula recall with obvious numbers like "base is 5 and height is 3, what is the area of a triangle").
+- Prefer questions where the student must choose the right approach, perform non-trivial reasoning or calculations, and interpret the result.
+- Questions must match the complexity and rigor of actual competitive entrance exam questions.
+- Wrong options should often tempt a student who misapplied a rule or fell for a typical misconception; avoid filler distractors.
+- For numerical setups, prefer realistic values and relationships; avoid gratuitous arithmetic—difficulty should come from reasoning.
+
+STEM LENGTH AND DEPTH (CRITICAL — LIKE REAL ENTRANCE PAPERS):
+- Do NOT output only one-line questions. Papers include short, medium, and long stems.
+- Across this batch, aim roughly: ~25% short (one line), ~50% medium (2–4 sentences or clear setup with given data), ~25% long (multi-sentence or paragraph: scenarios, passages, several givens, assertion–reason, or multi-step reasoning before the final question).
+- Long stems must remain a single MCQ with one correct option.
+- Prefer variety over uniform brevity.
 
 UNIQUENESS AND VARIETY REQUIREMENTS (CRITICAL):
 - Generate UNIQUE and DIFFERENT questions - avoid repetitive patterns or similar concepts
@@ -340,17 +336,13 @@ UNIQUENESS AND VARIETY REQUIREMENTS (CRITICAL):
 - Vary question formats: conceptual, analytical, calculation-based, application-based, etc.
 - If generating multiple questions, ensure they complement each other rather than overlap
 
-LANGUAGE REQUIREMENT (CRITICAL - MUST FOLLOW STRICTLY):
-- By default, ALL questions, options, and answers MUST be written entirely in ENGLISH.
-- CRITICAL EXCEPTION: If this is a LANGUAGE subject (any language - regional, foreign, or classical), you MUST write the ENTIRE question, ALL options, and ALL text IN THAT LANGUAGE.
-- This means: If the subject is Hindi, write in Hindi (हिंदी में लिखें). If it's Urdu, write in Urdu (اردو میں لکھیں). If it's French, write in French. And so on for ANY language.
-- DO NOT write questions ABOUT the language in English - write questions IN that language with native script/alphabet.
-- For language subjects: questionsText must be in that language, all Options must be in that language, everything in that language's native script.
-- For non-language subjects (like Science, Math, History, etc.): Always use English.
-- DO NOT mix languages within a single question.
+LANGUAGE REQUIREMENT:
+- Use the same language as the source material or context when that is clear; otherwise, use clear, natural English for all text.
+- Keep each question internally consistent in a single language (question stem and all options).
+- Do NOT mix multiple languages within a single question.
 
 QUESTION QUALITY REQUIREMENTS:
-1. Question text must be clear, concise, and grammatically correct
+1. Question text must be clear, grammatically correct, and appropriately detailed — not uniformly short; follow STEM LENGTH AND DEPTH above.
 2. All 4 options must be plausible and well-constructed
 3. Wrong options (distractors) should be common mistakes or misconceptions
 4. Options should be similar in length and format when possible
@@ -383,12 +375,21 @@ CRITICAL REQUIREMENTS:
    - Verifying facts if conceptual
    - Ensuring the answer is unambiguous and definitively correct
 
-JSON FORMATTING RULES:
-- All strings must be properly escaped for JSON
-- CRITICAL MATH ESCAPING: For LaTeX or math notation, NEVER use a single backslash like "\\( " or "\\[". You MUST use DOUBLE backslashes: "\\\\" (e.g., "\\\\( x^2 \\\\)" or "\\\\[ \\\\frac{1}{2} \\\\]"). Single backslashes will cause the JSON parser to crash immediately.
-- All special characters in strings must be JSON-escaped
-- No trailing commas
-- No comments
+JSON FORMATTING RULES (VALID JSON ONLY):
+- Output must be a single JSON array parseable by JSON.parse. No markdown fences, no text before [ or after ].
+- All strings use double quotes; internal quotes must be escaped as \\".
+- CRITICAL LATEX IN JSON: Each backslash that should appear in the final string must be written as \\\\ in the JSON source (e.g. inline math: "\\\\( \\\\frac{1}{2} \\\\)"). Wrong: single \\ before ( or frac — that breaks JSON.parse.
+- Prefer \\\\( ... \\\\) for inline and \\\\[ ... \\\\] for display. Every \\ in LaTeX is doubled in the JSON file.
+- No trailing commas; no comments; no single-quoted strings.
+
+MINIMAL SCHEMA (follow exactly):
+[
+  {
+    "questionsText": "string",
+    "Options": ["string", "string", "string", "string"],
+    "correctOption": "string (must match one Options entry exactly)"
+  }
+]
 
 EXAMPLE FORMAT (High-quality entrance exam questions):
 [
@@ -401,6 +402,11 @@ EXAMPLE FORMAT (High-quality entrance exam questions):
     "questionsText": "In a chemical reaction, if the rate constant doubles when temperature increases from 300K to 310K, what is the approximate activation energy? (Assume R = 8.314 J/mol·K)",
     "Options": ["53.6 kJ/mol", "107.2 kJ/mol", "26.8 kJ/mol", "214.4 kJ/mol"],
     "correctOption": "53.6 kJ/mol"
+  },
+  {
+    "questionsText": "If \\\\(f(x) = x^3 - 3x\\\\), what is \\\\(f'(1)\\\\)?",
+    "Options": ["\\\\(0\\\\)", "\\\\(1\\\\)", "\\\\(-1\\\\)", "\\\\(2\\\\)"],
+    "correctOption": "\\\\(0\\\\)"
   }
 ]
 ${topicGuidance}
@@ -421,7 +427,7 @@ Return ONLY the JSON array. Do not include markdown code blocks, explanations, o
         },
       ],
       temperature: isUsingSummary ? 0.7 : 0.1,
-      max_output_tokens: isUsingSummary ? undefined : 6000,
+      max_output_tokens: isUsingSummary ? undefined : 8000,
     });
 
     if (response) {
@@ -560,6 +566,12 @@ COMPETITIVE ENTRANCE EXAM QUESTION STANDARDS:
 - Include questions that require multi-step reasoning, critical thinking, and problem-solving
 - Questions must match the complexity and rigor of actual competitive entrance exam questions
 
+STEM LENGTH AND DEPTH (CRITICAL — LIKE REAL ENTRANCE PAPERS):
+- Do NOT output only one-line questions. Papers include short, medium, and long stems.
+- Across this batch, aim roughly: ~25% short (one line), ~50% medium (2–4 sentences or clear setup with given data), ~25% long (multi-sentence or paragraph: scenarios, passages, several givens, assertion–reason, or multi-step reasoning before the final question).
+- Long stems must remain a single MCQ with one correct option.
+- Prefer variety over uniform brevity.
+
 UNIQUENESS AND VARIETY REQUIREMENTS (CRITICAL):
 - Generate UNIQUE and DIFFERENT questions - avoid repetitive patterns or similar concepts
 - Ensure MAXIMUM VARIETY in topics, question types, and approaches
@@ -571,7 +583,7 @@ UNIQUENESS AND VARIETY REQUIREMENTS (CRITICAL):
 - Ensure questions complement each other rather than overlap in content or methodology
 
 QUESTION QUALITY REQUIREMENTS:
-1. Question text must be clear, concise, and grammatically correct
+1. Question text must be clear, grammatically correct, and appropriately detailed — not uniformly short; follow STEM LENGTH AND DEPTH above.
 2. All 4 options must be plausible and well-constructed
 3. Wrong options (distractors) should be common mistakes or misconceptions
 4. Options should be similar in length and format when possible
@@ -604,24 +616,32 @@ CRITICAL REQUIREMENTS:
    - Verifying facts if conceptual
    - Ensuring the answer is unambiguous and definitively correct
 
-JSON FORMATTING RULES:
-- All strings must be properly escaped for JSON
-- CRITICAL MATH ESCAPING: For LaTeX or math notation, NEVER use a single backslash like "\\( " or "\\[". You MUST use DOUBLE backslashes: "\\\\" (e.g., "\\\\( x^2 \\\\)" or "\\\\[ \\\\frac{1}{2} \\\\]"). Single backslashes will cause the JSON parser to crash immediately.
-- All special characters in strings must be JSON-escaped
-- No trailing commas
-- No comments
+JSON FORMATTING RULES (VALID JSON ONLY):
+- Output must be a single JSON array parseable by JSON.parse. No markdown fences, no text before [ or after ].
+- All strings use double quotes; escape internal quotes as \\".
+- CRITICAL LATEX IN JSON: Each backslash in LaTeX must be doubled in the JSON file: use \\\\( \\\\) for inline math, \\\\[ \\\\] for display, e.g. "\\\\( \\\\frac{1}{2} \\\\)". Single \\ before ( or [ breaks JSON.parse.
+- No trailing commas; no comments.
+
+MINIMAL SCHEMA:
+[
+  {
+    "questionsText": "string",
+    "Options": ["string", "string", "string", "string"],
+    "correctOption": "string (exactly one of Options)"
+  }
+]
 
 EXAMPLE FORMAT (High-quality entrance exam questions):
 [
   {
-    "questionsText": "A particle moves in a straight line with velocity v(t) = 3t² - 12t + 9 m/s. At what time does the particle come to rest?",
-    "Options": ["1 s and 3 s", "2 s only", "1.5 s", "The particle never comes to rest"],
-    "correctOption": "1 s and 3 s"
-  },
-  {
     "questionsText": "In a chemical reaction, if the rate constant doubles when temperature increases from 300K to 310K, what is the approximate activation energy? (Assume R = 8.314 J/mol·K)",
     "Options": ["53.6 kJ/mol", "107.2 kJ/mol", "26.8 kJ/mol", "214.4 kJ/mol"],
     "correctOption": "53.6 kJ/mol"
+  },
+  {
+    "questionsText": "If \\\\(f(x) = x^3 - 3x\\\\), what is \\\\(f'(1)\\\\)?",
+    "Options": ["\\\\(0\\\\)", "\\\\(1\\\\)", "\\\\(-1\\\\)", "\\\\(2\\\\)"],
+    "correctOption": "\\\\(0\\\\)"
   }
 ]
 
@@ -630,6 +650,7 @@ Return ONLY the JSON array. Do not include markdown code blocks, explanations, o
 
     const response = await client.responses.create({
       model: modelToUse,
+      
       input: [
         {
           role: "user",
@@ -639,7 +660,7 @@ Return ONLY the JSON array. Do not include markdown code blocks, explanations, o
         },
       ],
       temperature: isUsingSummary ? 0.7 : 0.1,
-      max_output_tokens: isUsingSummary ? undefined : 6000,
+      max_output_tokens: isUsingSummary ? undefined : 8000,
     });
 
     if (response) {
@@ -708,23 +729,26 @@ Return ONLY the JSON array. Do not include markdown code blocks, explanations, o
   const currentBatchSize = BATCH_SIZE_QUESTIONS;
   const totalBatches = Math.ceil(finalNumQuestions / currentBatchSize);
   const totalWaves = Math.ceil(totalBatches / MAX_BATCHES);
-  
+
   console.log(
     `Generating ${finalNumQuestions} questions in ${totalBatches} batches (${currentBatchSize} questions/batch) across ${totalWaves} wave(s) (max ${MAX_BATCHES} parallel batches per wave)`,
   );
-  
+
   const allQuestions: any[] = [];
-  
+
   // Process batches in waves (max MAX_BATCHES parallel at a time)
   for (let wave = 0; wave < totalWaves; wave++) {
     const startBatch = wave * MAX_BATCHES;
     const endBatch = Math.min(startBatch + MAX_BATCHES, totalBatches);
     const batchesInWave = endBatch - startBatch;
-    
-    console.log(`\n🌊 Wave ${wave + 1}/${totalWaves}: Running batches ${startBatch + 1}-${endBatch} in parallel...`);
-    
-    const batchPromises: Promise<{batchNumber: number, questions: any[]}>[] = [];
-    
+
+    console.log(
+      `\n🌊 Wave ${wave + 1}/${totalWaves}: Running batches ${startBatch + 1}-${endBatch} in parallel...`,
+    );
+
+    const batchPromises: Promise<{ batchNumber: number; questions: any[] }>[] =
+      [];
+
     // Create batch promises for this wave
     for (let i = startBatch; i < endBatch; i++) {
       const questionsProcessed = i * currentBatchSize;
@@ -741,16 +765,18 @@ Return ONLY the JSON array. Do not include markdown code blocks, explanations, o
         0,
         isUsingSummary,
         modelOverride,
-      ).then((questions) => ({
-        batchNumber: currentBatchNumber,
-        questions: questions || []
-      })).catch((error) => {
-        console.error(`Batch ${currentBatchNumber} failed:`, error);
-        return {
+      )
+        .then((questions) => ({
           batchNumber: currentBatchNumber,
-          questions: []
-        };
-      });
+          questions: questions || [],
+        }))
+        .catch((error) => {
+          console.error(`Batch ${currentBatchNumber} failed:`, error);
+          return {
+            batchNumber: currentBatchNumber,
+            questions: [],
+          };
+        });
 
       batchPromises.push(batchPromise);
     }
@@ -760,9 +786,9 @@ Return ONLY the JSON array. Do not include markdown code blocks, explanations, o
 
     // Process results from this wave
     for (const result of batchResults) {
-      if (result.status === 'fulfilled' && result.value.questions.length > 0) {
+      if (result.status === "fulfilled" && result.value.questions.length > 0) {
         const { batchNumber, questions } = result.value;
-        
+
         // Add topics
         const questionsWithTopics = questions.map((q: any) => ({
           ...q,
@@ -772,7 +798,10 @@ Return ONLY the JSON array. Do not include markdown code blocks, explanations, o
         // Filter duplicates if subjectId is provided
         let finalQuestions = questionsWithTopics;
         if (subjectId) {
-          finalQuestions = await filterDuplicates(questionsWithTopics, subjectId);
+          finalQuestions = await filterDuplicates(
+            questionsWithTopics,
+            subjectId,
+          );
         }
 
         if (finalQuestions.length > 0) {
@@ -785,12 +814,14 @@ Return ONLY the JSON array. Do not include markdown code blocks, explanations, o
             `Batch ${batchNumber} had no unique questions after deduplication`,
           );
         }
-      } else if (result.status === 'rejected') {
-        console.error('Batch promise was rejected:', result.reason);
+      } else if (result.status === "rejected") {
+        console.error("Batch promise was rejected:", result.reason);
       }
     }
-    
-    console.log(`✅ Wave ${wave + 1} complete: ${allQuestions.length}/${finalNumQuestions} questions generated so far`);
+
+    console.log(
+      `✅ Wave ${wave + 1} complete: ${allQuestions.length}/${finalNumQuestions} questions generated so far`,
+    );
 
     if (wave < totalWaves - 1) {
       console.log(`⏳ Waiting ${BATCH_DELAY / 1000}s before next wave...`);

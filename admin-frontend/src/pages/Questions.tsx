@@ -16,7 +16,6 @@ import {
   getSubjectNamesFromExam,
   type EntranceExam,
 } from "@/lib/entranceExams";
-import { useAuthStore } from "@/store/useAuthStore";
 import QuestionsList, { type Question } from "@/components/QuestionsList";
 import QuestionsFilter from "@/components/QuestionsFilter";
 
@@ -38,8 +37,16 @@ interface ActiveQuestionJob {
   entranceExamName?: string | null;
 }
 
+interface QuestionJob extends ActiveQuestionJob {
+  id?: string;
+  requestedQuestions?: number;
+  generatedQuestions?: number;
+  createdAt?: string;
+  completedAt?: string | null;
+  timeTaken?: string | null;
+}
+
 export default function Questions() {
-  const authUser = useAuthStore((s) => s.authUser);
   const [entranceExams, setEntranceExams] = useState<EntranceExam[]>([]);
   const [loadingExams, setLoadingExams] = useState(true);
   const [filteredSubjects, setFilteredSubjects] = useState<string[]>([]);
@@ -71,6 +78,26 @@ export default function Questions() {
   // Filter state for "My Questions" tab
   const [filterEntranceExamId, setFilterEntranceExamId] = useState<string>("");
   const [filterSubjectId, setFilterSubjectId] = useState<string>("");
+
+  // Recent jobs state
+  const [recentJobs, setRecentJobs] = useState<QuestionJob[]>([]);
+  const [loadingJobs, setLoadingJobs] = useState(false);
+
+  const fetchRecentJobs = useCallback(async () => {
+    try {
+      setLoadingJobs(true);
+      const response = await axiosInstance.get(
+        "/admin/jobs?type=question-generation&limit=30",
+      );
+      const jobs = (response.data?.jobs || []) as QuestionJob[];
+      setRecentJobs(jobs);
+    } catch (error) {
+      console.error("Failed to fetch recent jobs:", error);
+      setRecentJobs([]);
+    } finally {
+      setLoadingJobs(false);
+    }
+  }, []);
 
   const checkActiveJob = useCallback(async () => {
     try {
@@ -127,7 +154,8 @@ export default function Questions() {
 
   useEffect(() => {
     checkActiveJob();
-  }, [checkActiveJob]);
+    fetchRecentJobs();
+  }, [checkActiveJob, fetchRecentJobs]);
 
   useEffect(() => {
     if (!activeJobId) {
@@ -207,13 +235,6 @@ export default function Questions() {
   // Fetch questions for "My Questions" tab
   const fetchQuestions = useCallback(
     async (page: number = 1) => {
-      const userId = authUser?.id || authUser?._id;
-
-      if (!userId) {
-        console.warn("No user ID available for fetching questions");
-        return;
-      }
-
       setLoadingQuestions(true);
       try {
         // Build query parameters
@@ -229,7 +250,7 @@ export default function Questions() {
         }
 
         const response = await axiosInstance.get(
-          `/question/by-creator/${userId}?${params.toString()}`
+          `/question/by-creator?${params.toString()}`
         );
 
         if (response.data?.success) {
@@ -249,16 +270,15 @@ export default function Questions() {
         setLoadingQuestions(false);
       }
     },
-    [authUser?.id, authUser?._id, filterEntranceExamId, filterSubjectId]
+    [filterEntranceExamId, filterSubjectId]
   );
 
   // Fetch questions when switching to "My Questions" tab
   useEffect(() => {
-    const userId = authUser?.id || authUser?._id;
-    if (activeTab === "my-questions" && userId) {
+    if (activeTab === "my-questions") {
       fetchQuestions(1);
     }
-  }, [activeTab, fetchQuestions, authUser?.id, authUser?._id]);
+  }, [activeTab, fetchQuestions]);
 
   // Handle filter changes
   const handleFilterEntranceExamChange = (examId: string) => {
@@ -302,29 +322,29 @@ export default function Questions() {
       const sameExamByName =
         !!selectedEntranceExam &&
         normalizeValue(job.entranceExamName) ===
-          normalizeValue(selectedEntranceExam.entranceExamName);
+        normalizeValue(selectedEntranceExam.entranceExamName);
 
       return sameSubject && (sameExamById || sameExamByName);
     });
 
   const blockedCombinationJob = isSelectedCombinationRunning
     ? activeQuestionJobs.find((job) => {
-        const sameSubject =
-          normalizeValue(job.subjectName) === normalizeValue(selectedSubject);
-        const sameExamById =
-          !!selectedEntranceExam &&
-          [
-            normalizeValue(selectedEntranceExam._id),
-            normalizeValue(selectedEntranceExam.entranceExamId),
-            normalizeValue(selectedEntranceExamId),
-          ].includes(normalizeValue(job.entranceExamId));
-        const sameExamByName =
-          !!selectedEntranceExam &&
-          normalizeValue(job.entranceExamName) ===
-            normalizeValue(selectedEntranceExam.entranceExamName);
+      const sameSubject =
+        normalizeValue(job.subjectName) === normalizeValue(selectedSubject);
+      const sameExamById =
+        !!selectedEntranceExam &&
+        [
+          normalizeValue(selectedEntranceExam._id),
+          normalizeValue(selectedEntranceExam.entranceExamId),
+          normalizeValue(selectedEntranceExamId),
+        ].includes(normalizeValue(job.entranceExamId));
+      const sameExamByName =
+        !!selectedEntranceExam &&
+        normalizeValue(job.entranceExamName) ===
+        normalizeValue(selectedEntranceExam.entranceExamName);
 
-        return sameSubject && (sameExamById || sameExamByName);
-      })
+      return sameSubject && (sameExamById || sameExamByName);
+    })
     : null;
 
   const handleGenerate = async () => {
@@ -465,36 +485,42 @@ export default function Questions() {
   };
 
   return (
-    <div className="container mx-auto p-6 max-w-4xl">
+    <div className="container mx-auto p-6 max-w-7xl w-full">
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-2">
+        <TabsList className="grid w-full grid-cols-3 h-12 p-1">
           <TabsTrigger
             value="generate"
-            className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-semibold data-[state=active]:shadow-md"
+            className="text-base data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-semibold data-[state=active]:shadow-md py-2.5"
           >
             Generate Questions
           </TabsTrigger>
           <TabsTrigger
             value="my-questions"
-            className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-semibold data-[state=active]:shadow-md"
+            className="text-base data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-semibold data-[state=active]:shadow-md py-2.5"
           >
             My Questions
+          </TabsTrigger>
+          <TabsTrigger
+            value="history"
+            className="text-base data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-semibold data-[state=active]:shadow-md py-2.5"
+          >
+            History
           </TabsTrigger>
         </TabsList>
 
         <TabsContent value="generate" className="mt-6">
           <Card>
             <CardHeader>
-              <CardTitle>Generate Questions</CardTitle>
-              <CardDescription>
+              <CardTitle className="text-xl">Generate Questions</CardTitle>
+              <CardDescription className="text-base">
                 Generate questions by uploading a PDF or by selecting entrance
                 exam, subject, and optional topic
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
+            <CardContent className="space-y-6 text-base">
               {/* Entrance Exam - Required */}
               <div className="space-y-2">
-                <Label htmlFor="entrance-exam">
+                <Label htmlFor="entrance-exam" className="text-base">
                   Entrance Exam <span className="text-red-500">*</span>
                 </Label>
                 <select
@@ -502,7 +528,7 @@ export default function Questions() {
                   value={selectedEntranceExamId}
                   onChange={(e) => handleEntranceExamChange(e.target.value)}
                   disabled={loadingExams}
-                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm ring-offset-background focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                  className="flex h-10 w-full rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-sm ring-offset-background focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <option value="">
                     {loadingExams
@@ -519,7 +545,7 @@ export default function Questions() {
 
               {/* Subject - Required */}
               <div className="space-y-2">
-                <Label htmlFor="subject">
+                <Label htmlFor="subject" className="text-base">
                   Subject <span className="text-red-500">*</span>
                 </Label>
                 <select
@@ -529,7 +555,7 @@ export default function Questions() {
                   disabled={
                     !selectedEntranceExamId || filteredSubjects.length === 0
                   }
-                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm ring-offset-background focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                  className="flex h-10 w-full rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-sm ring-offset-background focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <option value="">
                     {selectedEntranceExamId
@@ -548,41 +574,43 @@ export default function Questions() {
 
               {/* Topic - Optional */}
               <div className="space-y-2">
-                <Label htmlFor="topic">Topic (Optional)</Label>
+                <Label htmlFor="topic" className="text-base">Topic (Optional)</Label>
                 <Input
                   id="topic"
                   type="text"
                   placeholder="e.g., Differential Calculus, Organic Chemistry"
                   value={topic}
                   onChange={(e) => setTopic(e.target.value)}
+                  className="h-10 text-base"
                 />
-                <p className="text-xs text-muted-foreground">
+                <p className="text-sm text-muted-foreground">
                   Specify a topic to focus the questions on a specific area
                 </p>
               </div>
 
               {/* PDF Upload - Optional */}
               <div className="space-y-2">
-                <Label htmlFor="file-input">PDF File (Optional)</Label>
+                <Label htmlFor="file-input" className="text-base">PDF File (Optional)</Label>
                 <Input
                   id="file-input"
                   type="file"
                   accept="application/pdf"
                   onChange={handleFileChange}
+                  className="text-base"
                 />
                 {selectedFile && (
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-base text-muted-foreground">
                     Selected: {selectedFile.name}
                   </p>
                 )}
-                <p className="text-xs text-muted-foreground">
+                <p className="text-sm text-muted-foreground">
                   Upload a PDF to generate questions based on its content
                 </p>
               </div>
 
               {/* Number of Questions */}
               <div className="space-y-2">
-                <Label htmlFor="num-questions">Number of Questions</Label>
+                <Label htmlFor="num-questions" className="text-base">Number of Questions</Label>
                 <Input
                   id="num-questions"
                   type="number"
@@ -592,36 +620,33 @@ export default function Questions() {
                   onChange={(e) =>
                     setNumQuestions(parseInt(e.target.value) || 50)
                   }
+                  className="h-10 text-base"
                 />
-                {/* <p className="text-xs text-muted-foreground">
-                  Default: 50 questions 
-                </p> */}
-                <p className="text-xs text-muted-foreground">
-                  Approx time reference: 500 questions can take around 2 minutes.
+                <p className="text-sm text-muted-foreground">
+                  Approx time reference: 200 questions can take around 3-5 minutes.
                 </p>
               </div>
 
               {/* Status Messages */}
               {status.type && (
                 <div
-                  className={`p-3 rounded-md ${
-                    status.type === "success"
+                  className={`p-4 rounded-md text-base ${status.type === "success"
                       ? "bg-green-50 text-green-800"
                       : "bg-red-50 text-red-800"
-                  }`}
+                    }`}
                 >
                   {status.message}
                 </div>
               )}
 
               {isJobRunning && (
-                <p className="text-sm text-muted-foreground">
+                <p className="text-base text-muted-foreground">
                   Questions are Being generated right now in background come back after few minutes or hours...
                 </p>
               )}
 
               {isSelectedCombinationRunning && (
-                <p className="text-sm text-amber-700">
+                <p className="text-base text-amber-700">
                   This combination is already in queue/running: {selectedEntranceExam?.entranceExamName || "Selected exam"} + {selectedSubject}
                   {blockedCombinationJob?.externalJobId
                     ? ` (Job #${blockedCombinationJob.externalJobId})`
@@ -650,12 +675,12 @@ export default function Questions() {
         <TabsContent value="my-questions" className="mt-6">
           <Card>
             <CardHeader>
-              <CardTitle>My Questions</CardTitle>
-              <CardDescription>
+              <CardTitle className="text-xl">My Questions</CardTitle>
+              <CardDescription className="text-base">
                 View all questions you have generated
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
+            <CardContent className="space-y-6 text-base">
               {/* Filter Section */}
               <QuestionsFilter
                 selectedEntranceExamId={filterEntranceExamId}
@@ -668,14 +693,14 @@ export default function Questions() {
 
               {/* Questions Count */}
               {pagination && (
-                <div className="text-sm text-muted-foreground">
+                <div className="text-base text-muted-foreground">
                   Showing {questions.length} of {pagination.totalCount}{" "}
                   questions
                 </div>
               )}
 
               {/* Scrollable Questions List Container */}
-              <div className="max-h-200 overflow-y-auto pr-2 border rounded-md p-4 bg-muted/20">
+              <div className="max-h-[70vh] overflow-y-auto pr-2 border rounded-md p-5 bg-muted/20">
                 <QuestionsList
                   questions={questions}
                   loading={loadingQuestions}
@@ -691,7 +716,7 @@ export default function Questions() {
               {/* Pagination */}
               {pagination && pagination.totalPages > 1 && (
                 <div className="flex items-center justify-between pt-4 border-t">
-                  <div className="text-sm text-muted-foreground">
+                  <div className="text-base text-muted-foreground">
                     Page {pagination.currentPage} of {pagination.totalPages}
                   </div>
                   <div className="flex gap-2">
@@ -714,6 +739,98 @@ export default function Questions() {
                   </div>
                 </div>
               )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="history" className="mt-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-xl">Generation History</CardTitle>
+              <CardDescription className="text-base">
+                See the status of your recent question generation jobs.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4 text-base">
+              <p className="text-sm text-muted-foreground">
+                This list shows your most recent question generation jobs. You can stay on this page and we&apos;ll update the status automatically.
+              </p>
+              <div className="max-h-[70vh] overflow-y-auto border rounded-md bg-muted/30">
+                {loadingJobs ? (
+                  <div className="p-5 text-base text-muted-foreground">
+                    Loading jobs...
+                  </div>
+                ) : recentJobs.length === 0 ? (
+                  <div className="p-5 text-base text-muted-foreground">
+                    You haven&apos;t generated any questions yet.
+                  </div>
+                ) : (
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted/60">
+                      <tr className="text-left">
+                        <th className="px-4 py-3">When</th>
+                        <th className="px-4 py-3">Exam</th>
+                        <th className="px-4 py-3">Subject</th>
+                        <th className="px-4 py-3 text-center">Requested</th>
+                        <th className="px-4 py-3 text-center">Generated</th>
+                        <th className="px-4 py-3 text-center">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {recentJobs.map((job) => {
+                        const statusLabel =
+                          job.status === "completed"
+                            ? "Completed"
+                            : job.status === "failed"
+                            ? "Failed"
+                            : job.status === "queued" ||
+                              job.status === "running" ||
+                              job.status === "partial"
+                            ? "In progress"
+                            : job.status || "Unknown";
+
+                        const statusClass =
+                          job.status === "completed"
+                            ? "bg-green-50 text-green-800 border-green-200"
+                            : job.status === "failed"
+                            ? "bg-red-50 text-red-800 border-red-200"
+                            : "bg-amber-50 text-amber-800 border-amber-200";
+
+                        const createdAt = job.createdAt
+                          ? new Date(job.createdAt)
+                          : null;
+
+                        return (
+                          <tr key={job.externalJobId || job.id}>
+                            <td className="px-4 py-3 align-top">
+                              {createdAt ? createdAt.toLocaleString() : "-"}
+                            </td>
+                            <td className="px-4 py-3 align-top">
+                              {job.entranceExamName || "-"}
+                            </td>
+                            <td className="px-4 py-3 align-top">
+                              {job.subjectName || "-"}
+                            </td>
+                            <td className="px-4 py-3 text-center align-top">
+                              {job.requestedQuestions ?? "-"}
+                            </td>
+                            <td className="px-4 py-3 text-center align-top">
+                              {job.generatedQuestions ?? "-"}
+                            </td>
+                            <td className="px-4 py-3 text-center align-top">
+                              <span
+                                className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium ${statusClass}`}
+                              >
+                                {statusLabel}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
+              </div>
             </CardContent>
           </Card>
         </TabsContent>

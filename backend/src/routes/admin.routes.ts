@@ -15,6 +15,7 @@ import {
 import {
   GetActiveQuestionJobsForAdmin,
   GetJobStatusForAdmin,
+  GetRecentQuestionJobsForAdmin,
 } from "../controller/job.controller";
 import { adminAuthMiddleware } from "../middleware/middleware";
 
@@ -61,4 +62,5 @@ AdminRouter.get("/statistics", adminAuthMiddleware, GetPlatformStatistics);
 
 // Background job monitoring - Require Admin authentication
 AdminRouter.get("/jobs/active", adminAuthMiddleware, GetActiveQuestionJobsForAdmin);
+AdminRouter.get("/jobs", adminAuthMiddleware, GetRecentQuestionJobsForAdmin);
 AdminRouter.get("/jobs/:id/status", adminAuthMiddleware, GetJobStatusForAdmin);

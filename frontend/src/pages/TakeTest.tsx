@@ -31,9 +31,9 @@ function TakeTest() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [timerInterval, setTimerInterval] = useState<NodeJS.Timeout | null>(
-    null
-  );
+  const [timerInterval, setTimerInterval] = useState<ReturnType<
+    typeof setInterval
+  > | null>(null);
 
   // Load test data
   useEffect(() => {
@@ -356,8 +356,8 @@ function TakeTest() {
                     )}
                   </div>
 
-                  <h2 className="text-xl font-semibold text-gray-900 mb-6">
-                    {currentQuestion.questionsText}
+                  <h2 className="text-xl font-semibold text-gray-900 mb-6 leading-relaxed">
+                    <MathRenderer text={currentQuestion.questionsText ?? ""} />
                   </h2>
                 </div>
 
