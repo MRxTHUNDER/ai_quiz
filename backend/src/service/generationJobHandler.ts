@@ -8,7 +8,12 @@ import { GenerateAIQuestions } from "./generateQuestion";
 import { GenerateQuestionsFromSubjectKnowledge } from "./generateQuestionFromSubject";
 import { getOrCreateSummary } from "./pdfSummary.service";
 import { BackgroundJob } from "../models/backgroundJob.model";
-import { QuestionGenerationPayload } from "../types/job.types";
+import {
+  ImportFromDocxPayload,
+  QuestionGenerationPayload,
+} from "../types/job.types";
+import { extractQuestionsFromDocxBuffer } from "./docxParser.service";
+import { getObjectBufferFromS3 } from "./s3Service";
 import { formatDuration } from "../utils/formatDuration";
 import { Summary } from "../models/summary.model";
 import { OPENAI_MODEL_MINI } from "../env";
@@ -21,7 +26,11 @@ interface HandlerResult {
 
 const saveQuestions = async (
   questions: any[],
-  payload: QuestionGenerationPayload,
+  payload: {
+    subjectId: string;
+    entranceExamId: string;
+    userId: string;
+  },
 ) => {
   if (!questions.length) {
     return [];
@@ -33,7 +42,7 @@ const saveQuestions = async (
     correctOption: question.correctOption,
     SubjectId: payload.subjectId,
     entranceExam: payload.entranceExamId,
-    topics: question.topics,
+    topics: question.topics || [],
     createdBy: payload.userId,
   }));
 
@@ -66,6 +75,10 @@ export const handleQuestionGenerationJob = async (
       timeTaken: null,
     },
   });
+
+  if (payload.type === "import_from_docx") {
+    return handleDocxImportJob(payload, externalJobId, runStartedAt);
+  }
 
   let generatedQuestions: any[] = [];
 
@@ -230,6 +243,36 @@ export const handleQuestionGenerationJob = async (
       },
     },
   );
+
+  await BackgroundJob.findOneAndUpdate({ externalJobId }, {
+    $set: {
+      status: "completed",
+      generatedQuestions: insertedCount,
+      completedAt: new Date(),
+      timeTaken: formatDuration(Date.now() - runStartedAt.getTime()),
+    },
+  });
+
+  return {
+    insertedQuestionIds: insertedQuestions.map((q: any) => q._id.toString()),
+  };
+};
+
+const handleDocxImportJob = async (
+  payload: ImportFromDocxPayload,
+  externalJobId: string,
+  runStartedAt: Date,
+): Promise<HandlerResult> => {
+  const docxBuffer = await getObjectBufferFromS3(payload.docxKey);
+  const parsedQuestions = await extractQuestionsFromDocxBuffer(docxBuffer);
+
+  await BackgroundJob.findOneAndUpdate(
+    { externalJobId },
+    { $set: { requestedQuestions: parsedQuestions.length } },
+  );
+
+  const insertedQuestions = await saveQuestions(parsedQuestions, payload);
+  const insertedCount = insertedQuestions.length;
 
   await BackgroundJob.findOneAndUpdate({ externalJobId }, {
     $set: {

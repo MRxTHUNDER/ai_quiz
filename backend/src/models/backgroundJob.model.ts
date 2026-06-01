@@ -11,7 +11,7 @@ const backgroundJobSchema = new Schema(
     },
     type: {
       type: String,
-      enum: ["generate_from_pdf", "generate_direct"],
+      enum: ["generate_from_pdf", "generate_direct", "import_from_docx"],
       required: true,
       index: true,
     },

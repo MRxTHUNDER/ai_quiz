@@ -1,4 +1,7 @@
-export type QuestionJobType = "generate_from_pdf" | "generate_direct";
+export type QuestionJobType =
+  | "generate_from_pdf"
+  | "generate_direct"
+  | "import_from_docx";
 
 export interface QuestionGenerationBasePayload {
   subjectId: string;
@@ -18,9 +21,19 @@ export interface GenerateDirectPayload extends QuestionGenerationBasePayload {
   type: "generate_direct";
 }
 
+export interface ImportFromDocxPayload {
+  type: "import_from_docx";
+  subjectId: string;
+  entranceExamId: string;
+  userId: string;
+  docxKey: string;
+  fileName: string;
+}
+
 export type QuestionGenerationPayload =
   | GenerateFromPdfPayload
-  | GenerateDirectPayload;
+  | GenerateDirectPayload
+  | ImportFromDocxPayload;
 
 export type BackgroundJobStatus =
   | "queued"

@@ -152,6 +152,7 @@ export const GetQuestionsByCreator = async (req: Request, res: Response) => {
     // Get filter parameters
     const entranceExamId = req.query.entranceExamId as string | undefined;
     const subjectId = req.query.subjectId as string | undefined;
+    const searchQuery = (req.query.search as string | undefined)?.trim();
 
     // Build query filter
     const queryFilter: any = {};
@@ -289,6 +290,15 @@ export const GetQuestionsByCreator = async (req: Request, res: Response) => {
     } else if (entranceExamId && subjectObjectIds.length > 0) {
       // Only entrance exam selected, filter by all subjects in that exam
       queryFilter.SubjectId = { $in: subjectObjectIds };
+    }
+
+    if (searchQuery) {
+      const escapedSearch = searchQuery.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const searchRegex = new RegExp(escapedSearch, "i");
+      queryFilter.$or = [
+        { questionsText: searchRegex },
+        { Options: searchRegex },
+      ];
     }
 
     // Count total matching questions

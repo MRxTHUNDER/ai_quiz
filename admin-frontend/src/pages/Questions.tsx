@@ -18,6 +18,8 @@ import {
 } from "@/lib/entranceExams";
 import QuestionsList, { type Question } from "@/components/QuestionsList";
 import QuestionsFilter from "@/components/QuestionsFilter";
+import QuestionPagination from "@/components/QuestionPagination";
+import { Search } from "lucide-react";
 
 interface Pagination {
   currentPage: number;
@@ -57,6 +59,15 @@ export default function Questions() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [numQuestions, setNumQuestions] = useState<number>(50);
   const [generating, setGenerating] = useState(false);
+  const [uploadDocxFile, setUploadDocxFile] = useState<File | null>(null);
+  const [uploadDocxExamId, setUploadDocxExamId] = useState<string>("");
+  const [uploadDocxSubject, setUploadDocxSubject] = useState<string>("");
+  const [uploadDocxSubjects, setUploadDocxSubjects] = useState<string[]>([]);
+  const [uploadingDocx, setUploadingDocx] = useState(false);
+  const [uploadDocxStatus, setUploadDocxStatus] = useState<{
+    type: "success" | "error" | null;
+    message: string;
+  }>({ type: null, message: "" });
   const [status, setStatus] = useState<{
     type: "success" | "error" | null;
     message: string;
@@ -78,6 +89,8 @@ export default function Questions() {
   // Filter state for "My Questions" tab
   const [filterEntranceExamId, setFilterEntranceExamId] = useState<string>("");
   const [filterSubjectId, setFilterSubjectId] = useState<string>("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
 
   // Recent jobs state
   const [recentJobs, setRecentJobs] = useState<QuestionJob[]>([]);
@@ -212,9 +225,123 @@ export default function Questions() {
     }
   }, [selectedEntranceExamId, entranceExams]);
 
+  useEffect(() => {
+    if (uploadDocxExamId) {
+      const selectedExam = entranceExams.find(
+        (exam) =>
+          exam.entranceExamId === uploadDocxExamId ||
+          exam._id === uploadDocxExamId,
+      );
+      if (selectedExam) {
+        setUploadDocxSubjects(getSubjectNamesFromExam(selectedExam));
+      } else {
+        setUploadDocxSubjects([]);
+      }
+      setUploadDocxSubject("");
+    } else {
+      setUploadDocxSubjects([]);
+      setUploadDocxSubject("");
+    }
+  }, [uploadDocxExamId, entranceExams]);
+
   const handleEntranceExamChange = (examId: string) => {
     setSelectedEntranceExamId(examId);
     setSelectedSubject(""); // Reset subject when exam changes
+  };
+
+  const handleDocxFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (!file.name.toLowerCase().endsWith(".docx")) {
+        setUploadDocxStatus({
+          type: "error",
+          message: "Please select a .docx file",
+        });
+        return;
+      }
+      setUploadDocxFile(file);
+      setUploadDocxStatus({ type: null, message: "" });
+    }
+  };
+
+  const handleUploadDocx = async () => {
+    if (!uploadDocxSubject || !uploadDocxExamId) {
+      setUploadDocxStatus({
+        type: "error",
+        message: "Please select entrance exam and subject",
+      });
+      return;
+    }
+
+    if (!uploadDocxFile) {
+      setUploadDocxStatus({
+        type: "error",
+        message: "Please select a DOCX file",
+      });
+      return;
+    }
+
+    setUploadingDocx(true);
+    setUploadDocxStatus({ type: null, message: "" });
+
+    try {
+      const selectedExam = entranceExams.find(
+        (exam) =>
+          exam.entranceExamId === uploadDocxExamId ||
+          exam._id === uploadDocxExamId,
+      );
+      const examId = selectedExam?.entranceExamId || uploadDocxExamId;
+
+      const formData = new FormData();
+      formData.append("file", uploadDocxFile);
+      formData.append("entranceExamId", examId);
+      formData.append("subjectId", uploadDocxSubject);
+
+      const response = await axiosInstance.post(
+        "/upload/docx/questions",
+        formData,
+        {
+          headers: { "Content-Type": "multipart/form-data" },
+        },
+      );
+
+      const queuedJobId = response.data?.jobId;
+      if (queuedJobId) {
+        setActiveJobId(String(queuedJobId));
+        setIsJobRunning(true);
+      }
+
+      setUploadDocxStatus({
+        type: "success",
+        message:
+          "Upload successful! We're extracting your questions now — this usually takes 1–3 minutes (larger files may take a little longer). Check the History tab for progress, or open My Questions in a few minutes to see them.",
+      });
+
+      setUploadDocxFile(null);
+      setUploadDocxSubject("");
+      setUploadDocxExamId("");
+      const docxInput = document.getElementById(
+        "docx-file-input",
+      ) as HTMLInputElement;
+      if (docxInput) {
+        docxInput.value = "";
+      }
+
+      await checkActiveJob();
+      await fetchRecentJobs();
+    } catch (error: unknown) {
+      console.error("DOCX upload error:", error);
+      const errorMessage =
+        error && typeof error === "object" && "response" in error
+          ? (error.response as { data?: { message?: string } })?.data?.message
+          : undefined;
+      setUploadDocxStatus({
+        type: "error",
+        message: errorMessage || "Failed to upload DOCX",
+      });
+    } finally {
+      setUploadingDocx(false);
+    }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -248,6 +375,9 @@ export default function Questions() {
         if (filterSubjectId) {
           params.append("subjectId", filterSubjectId);
         }
+        if (debouncedSearch) {
+          params.append("search", debouncedSearch);
+        }
 
         const response = await axiosInstance.get(
           `/question/by-creator?${params.toString()}`
@@ -270,10 +400,17 @@ export default function Questions() {
         setLoadingQuestions(false);
       }
     },
-    [filterEntranceExamId, filterSubjectId]
+    [filterEntranceExamId, filterSubjectId, debouncedSearch],
   );
 
-  // Fetch questions when switching to "My Questions" tab
+  useEffect(() => {
+    const timerId = window.setTimeout(() => {
+      setDebouncedSearch(searchQuery.trim());
+    }, 400);
+
+    return () => window.clearTimeout(timerId);
+  }, [searchQuery]);
+
   useEffect(() => {
     if (activeTab === "my-questions") {
       fetchQuestions(1);
@@ -293,6 +430,8 @@ export default function Questions() {
   const handleResetFilters = () => {
     setFilterEntranceExamId("");
     setFilterSubjectId("");
+    setSearchQuery("");
+    setDebouncedSearch("");
   };
 
   const selectedEntranceExam = entranceExams.find(
@@ -487,7 +626,7 @@ export default function Questions() {
   return (
     <div className="container mx-auto p-6 max-w-7xl w-full">
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-3 h-12 p-1">
+        <TabsList className="grid w-full grid-cols-4 h-12 p-1">
           <TabsTrigger
             value="generate"
             className="text-base data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-semibold data-[state=active]:shadow-md py-2.5"
@@ -499,6 +638,12 @@ export default function Questions() {
             className="text-base data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-semibold data-[state=active]:shadow-md py-2.5"
           >
             My Questions
+          </TabsTrigger>
+          <TabsTrigger
+            value="upload"
+            className="text-base data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-semibold data-[state=active]:shadow-md py-2.5"
+          >
+            Upload Questions
           </TabsTrigger>
           <TabsTrigger
             value="history"
@@ -672,6 +817,126 @@ export default function Questions() {
           </Card>
         </TabsContent>
 
+        <TabsContent value="upload" className="mt-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-xl">Upload Questions</CardTitle>
+              <CardDescription className="text-base">
+                Upload a DOCX file with numbered MCQs and an Answer Key section
+                at the end. Questions are imported into the selected exam and
+                subject.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6 text-base">
+              <div className="space-y-2">
+                <Label htmlFor="upload-docx-exam" className="text-base">
+                  Entrance Exam <span className="text-red-500">*</span>
+                </Label>
+                <select
+                  id="upload-docx-exam"
+                  value={uploadDocxExamId}
+                  onChange={(e) => setUploadDocxExamId(e.target.value)}
+                  disabled={loadingExams}
+                  className="flex h-10 w-full rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-sm ring-offset-background focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <option value="">
+                    {loadingExams
+                      ? "Loading exams..."
+                      : "Select an entrance exam"}
+                  </option>
+                  {entranceExams.map((exam) => (
+                    <option key={exam._id} value={exam.entranceExamId}>
+                      {exam.entranceExamName}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="upload-docx-subject" className="text-base">
+                  Subject <span className="text-red-500">*</span>
+                </Label>
+                <select
+                  id="upload-docx-subject"
+                  value={uploadDocxSubject}
+                  onChange={(e) => setUploadDocxSubject(e.target.value)}
+                  disabled={
+                    !uploadDocxExamId || uploadDocxSubjects.length === 0
+                  }
+                  className="flex h-10 w-full rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-sm ring-offset-background focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <option value="">
+                    {uploadDocxExamId
+                      ? uploadDocxSubjects.length > 0
+                        ? "Select a subject"
+                        : "No subjects available"
+                      : "Select an entrance exam first"}
+                  </option>
+                  {uploadDocxSubjects.map((subject) => (
+                    <option key={subject} value={subject}>
+                      {subject}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="docx-file-input" className="text-base">
+                  DOCX File <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  id="docx-file-input"
+                  type="file"
+                  accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                  onChange={handleDocxFileChange}
+                  className="text-base"
+                />
+                {uploadDocxFile && (
+                  <p className="text-base text-muted-foreground">
+                    Selected: {uploadDocxFile.name}
+                  </p>
+                )}
+                <p className="text-sm text-muted-foreground">
+                  Format: numbered questions (1. ...), options A–D on separate
+                  lines, then an &quot;Answer Key&quot; section (e.g. 1. B, 2. C).
+                </p>
+              </div>
+
+              {uploadDocxStatus.type && (
+                <div
+                  className={`p-4 rounded-md text-base ${
+                    uploadDocxStatus.type === "success"
+                      ? "bg-green-50 text-green-800"
+                      : "bg-red-50 text-red-800"
+                  }`}
+                >
+                  {uploadDocxStatus.message}
+                </div>
+              )}
+
+              {isJobRunning && (
+                <p className="text-base text-muted-foreground">
+                  Import in progress — questions are usually ready within a few
+                  minutes. Check the History tab for status.
+                </p>
+              )}
+
+              <Button
+                onClick={handleUploadDocx}
+                disabled={
+                  uploadingDocx ||
+                  !uploadDocxFile ||
+                  !uploadDocxSubject ||
+                  !uploadDocxExamId
+                }
+                className="w-full"
+              >
+                {uploadingDocx ? "Uploading..." : "Upload & Import Questions"}
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         <TabsContent value="my-questions" className="mt-6">
           <Card>
             <CardHeader>
@@ -691,12 +956,39 @@ export default function Questions() {
                 loadingExams={false}
               />
 
+              <div className="space-y-2">
+                <Label htmlFor="question-search" className="text-base">
+                  Search questions
+                </Label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    id="question-search"
+                    type="search"
+                    placeholder="Search by question text or option…"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="h-10 pl-9 text-base"
+                  />
+                </div>
+              </div>
+
               {/* Questions Count */}
               {pagination && (
                 <div className="text-base text-muted-foreground">
                   Showing {questions.length} of {pagination.totalCount}{" "}
                   questions
                 </div>
+              )}
+
+              {pagination && pagination.totalPages > 1 && (
+                <QuestionPagination
+                  placement="top"
+                  currentPage={pagination.currentPage}
+                  totalPages={pagination.totalPages}
+                  onPageChange={fetchQuestions}
+                  disabled={loadingQuestions}
+                />
               )}
 
               {/* Scrollable Questions List Container */}
@@ -707,37 +999,20 @@ export default function Questions() {
                   onQuestionUpdated={() => fetchQuestions(currentPage)}
                   onQuestionDeleted={() => fetchQuestions(currentPage)}
                   currentPage={currentPage}
-                  limit={pagination?.limit || 10}
+                  limit={pagination?.limit || 20}
                   selectedQuestionIds={selectedQuestionIds}
                   onSelectionChange={setSelectedQuestionIds}
                 />
               </div>
 
-              {/* Pagination */}
               {pagination && pagination.totalPages > 1 && (
-                <div className="flex items-center justify-between pt-4 border-t">
-                  <div className="text-base text-muted-foreground">
-                    Page {pagination.currentPage} of {pagination.totalPages}
-                  </div>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => fetchQuestions(currentPage - 1)}
-                      disabled={!pagination.hasPrevPage}
-                    >
-                      Previous
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => fetchQuestions(currentPage + 1)}
-                      disabled={!pagination.hasNextPage}
-                    >
-                      Next
-                    </Button>
-                  </div>
-                </div>
+                <QuestionPagination
+                  placement="bottom"
+                  currentPage={pagination.currentPage}
+                  totalPages={pagination.totalPages}
+                  onPageChange={fetchQuestions}
+                  disabled={loadingQuestions}
+                />
               )}
             </CardContent>
           </Card>

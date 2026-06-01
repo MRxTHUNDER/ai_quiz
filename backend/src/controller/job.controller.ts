@@ -65,12 +65,18 @@ export const GetActiveQuestionJobsForAdmin = async (
   try {
     const requestedType = (req.query.type as string | undefined) || undefined;
 
+    const questionGenerationTypes = [
+      "generate_from_pdf",
+      "generate_direct",
+      "import_from_docx",
+    ];
+
     const typeFilter =
       requestedType === "question-generation"
-        ? ["generate_from_pdf", "generate_direct"]
-        : requestedType === "generate_from_pdf" || requestedType === "generate_direct"
+        ? questionGenerationTypes
+        : questionGenerationTypes.includes(requestedType || "")
           ? [requestedType]
-          : ["generate_from_pdf", "generate_direct"];
+          : questionGenerationTypes;
 
     const activeJobs = await BackgroundJob.find({
       status: { $in: ["queued", "running", "partial"] },
@@ -98,12 +104,18 @@ export const GetRecentQuestionJobsForAdmin = async (
     const requestedType = (req.query.type as string | undefined) || undefined;
     const requestedLimit = Number(req.query.limit) || 50;
 
+    const questionGenerationTypes = [
+      "generate_from_pdf",
+      "generate_direct",
+      "import_from_docx",
+    ];
+
     const typeFilter =
       requestedType === "question-generation"
-        ? ["generate_from_pdf", "generate_direct"]
-        : requestedType === "generate_from_pdf" || requestedType === "generate_direct"
+        ? questionGenerationTypes
+        : questionGenerationTypes.includes(requestedType || "")
           ? [requestedType]
-          : ["generate_from_pdf", "generate_direct"];
+          : questionGenerationTypes;
 
     const limit = Math.min(Math.max(requestedLimit, 1), 100);
 
