@@ -35,6 +35,8 @@ interface ActiveQuestionJob {
   subjectName?: string | null;
   entranceExamId?: string | null;
   entranceExamName?: string | null;
+  chapterName?: string | null;
+  chapterNickname?: string | null;
 }
 
 interface QuestionJob extends ActiveQuestionJob {
@@ -55,6 +57,8 @@ export default function Questions() {
     useState<string>("");
   const [topic, setTopic] = useState<string>("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [chapterName, setChapterName] = useState<string>("");
+  const [chapterNickname, setChapterNickname] = useState<string>("");
   const [numQuestions, setNumQuestions] = useState<number>(50);
   const [generating, setGenerating] = useState(false);
   const [status, setStatus] = useState<{
@@ -228,6 +232,7 @@ export default function Questions() {
         return;
       }
       setSelectedFile(file);
+      setTopic("");
       setStatus({ type: null, message: "" });
     }
   };
@@ -364,6 +369,14 @@ export default function Questions() {
       return;
     }
 
+    if (selectedFile && !chapterName.trim()) {
+      setStatus({
+        type: "error",
+        message: "Please enter chapter name for PDF-based generation",
+      });
+      return;
+    }
+
     if (isSelectedCombinationRunning) {
       setStatus({
         type: "error",
@@ -416,6 +429,8 @@ export default function Questions() {
           key,
           subjectId: selectedSubject,
           entranceExamId: examId,
+          chapterName: chapterName.trim(),
+          chapterNickname: chapterNickname.trim() || undefined,
           numQuestions: numQuestions > 0 ? numQuestions : undefined,
         });
 
@@ -427,7 +442,9 @@ export default function Questions() {
 
         setStatus({
           type: "success",
-          message: "Question generation queued successfully.",
+          message: `Question generation queued for chapter ${
+            tagResponse.data?.chapter?.chapterName || chapterName.trim()
+          }.`,
         });
       } else {
         // Generate questions directly without PDF
@@ -455,6 +472,8 @@ export default function Questions() {
       setSelectedSubject("");
       setSelectedEntranceExamId("");
       setTopic("");
+      setChapterName("");
+      setChapterNickname("");
       setNumQuestions(50);
       const fileInput = document.getElementById(
         "file-input"
@@ -514,7 +533,8 @@ export default function Questions() {
               <CardTitle className="text-xl">Generate Questions</CardTitle>
               <CardDescription className="text-base">
                 Generate questions by uploading a PDF or by selecting entrance
-                exam, subject, and optional topic
+                exam, subject, and optional topic. For PDF generation, chapter
+                name is required.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6 text-base">
@@ -581,10 +601,47 @@ export default function Questions() {
                   placeholder="e.g., Differential Calculus, Organic Chemistry"
                   value={topic}
                   onChange={(e) => setTopic(e.target.value)}
+                  disabled={selectedFile !== null}
                   className="h-10 text-base"
                 />
                 <p className="text-sm text-muted-foreground">
-                  Specify a topic to focus the questions on a specific area
+                  {selectedFile
+                    ? "Topic is not used for PDF flow. Use chapter fields below."
+                    : "Specify a topic to focus the questions on a specific area"}
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="chapter-name" className="text-base">
+                  Chapter Name {selectedFile ? <span className="text-red-500">*</span> : null}
+                </Label>
+                <Input
+                  id="chapter-name"
+                  type="text"
+                  placeholder="e.g., Class 11 Mathematics Chapter 3"
+                  value={chapterName}
+                  onChange={(e) => setChapterName(e.target.value)}
+                  className="h-10 text-base"
+                />
+                <p className="text-sm text-muted-foreground">
+                  Required when uploading PDF. This is the canonical chapter identifier.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="chapter-nickname" className="text-base">
+                  Chapter Nickname (Optional)
+                </Label>
+                <Input
+                  id="chapter-nickname"
+                  type="text"
+                  placeholder="e.g., Ch-3 Vectors Quick Ref"
+                  value={chapterNickname}
+                  onChange={(e) => setChapterNickname(e.target.value)}
+                  className="h-10 text-base"
+                />
+                <p className="text-sm text-muted-foreground">
+                  Optional label for easier reference in job history.
                 </p>
               </div>
 
@@ -771,6 +828,7 @@ export default function Questions() {
                         <th className="px-4 py-3">When</th>
                         <th className="px-4 py-3">Exam</th>
                         <th className="px-4 py-3">Subject</th>
+                        <th className="px-4 py-3">Chapter</th>
                         <th className="px-4 py-3 text-center">Requested</th>
                         <th className="px-4 py-3 text-center">Generated</th>
                         <th className="px-4 py-3 text-center">Status</th>
@@ -810,6 +868,11 @@ export default function Questions() {
                             </td>
                             <td className="px-4 py-3 align-top">
                               {job.subjectName || "-"}
+                            </td>
+                            <td className="px-4 py-3 align-top">
+                              {job.chapterName
+                                ? `${job.chapterName}${job.chapterNickname ? ` (${job.chapterNickname})` : ""}`
+                                : "-"}
                             </td>
                             <td className="px-4 py-3 text-center align-top">
                               {job.requestedQuestions ?? "-"}

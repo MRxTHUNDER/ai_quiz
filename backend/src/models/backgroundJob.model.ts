@@ -41,6 +41,20 @@ const backgroundJobSchema = new Schema(
       type: String,
       required: true,
     },
+    chapterId: {
+      type: Schema.Types.ObjectId,
+      ref: "Chapter",
+      required: false,
+      index: true,
+    },
+    chapterName: {
+      type: String,
+      required: false,
+    },
+    chapterNickname: {
+      type: String,
+      required: false,
+    },
     requestedQuestions: {
       type: Number,
       required: true,
@@ -85,6 +99,9 @@ export interface BackgroundJobDoc {
   subjectName: string;
   entranceExamId: string;
   entranceExamName: string;
+  chapterId?: string;
+  chapterName?: string;
+  chapterNickname?: string;
   requestedQuestions: number;
   generatedQuestions: number;
   status: BackgroundJobStatus;

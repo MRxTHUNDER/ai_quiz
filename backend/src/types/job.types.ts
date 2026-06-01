@@ -12,6 +12,10 @@ export interface GenerateFromPdfPayload extends QuestionGenerationBasePayload {
   type: "generate_from_pdf";
   pdfId: string;
   pdfUrl: string;
+  chapterId?: string;
+  chapterName?: string;
+  chapterNickname?: string;
+  pageCount?: number;
 }
 
 export interface GenerateDirectPayload extends QuestionGenerationBasePayload {

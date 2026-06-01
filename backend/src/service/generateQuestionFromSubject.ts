@@ -373,7 +373,7 @@ Return ONLY the JSON array.`;
           },
         ],
         temperature: 0.1,
-        max_output_tokens: 8000,
+        max_output_tokens: 15000,
       });
 
       content = response.output_text || "[]";

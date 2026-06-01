@@ -12,6 +12,7 @@ import { QuestionGenerationPayload } from "../types/job.types";
 import { formatDuration } from "../utils/formatDuration";
 import { Summary } from "../models/summary.model";
 import { OPENAI_MODEL_MINI } from "../env";
+import { Chapter } from "../models/chapter.model";
 
 const MAX_POST_DEDUPE_FILL_ROUNDS = 80;
 
@@ -33,6 +34,14 @@ const saveQuestions = async (
     correctOption: question.correctOption,
     SubjectId: payload.subjectId,
     entranceExam: payload.entranceExamId,
+    chapterId:
+      payload.type === "generate_from_pdf" ? payload.chapterId : undefined,
+    chapterName:
+      payload.type === "generate_from_pdf" ? payload.chapterName : undefined,
+    chapterNickname:
+      payload.type === "generate_from_pdf"
+        ? payload.chapterNickname || undefined
+        : undefined,
     topics: question.topics,
     createdBy: payload.userId,
   }));
@@ -239,6 +248,16 @@ export const handleQuestionGenerationJob = async (
       timeTaken: formatDuration(Date.now() - runStartedAt.getTime()),
     },
   });
+
+  if (payload.type === "generate_from_pdf") {
+    await Chapter.updateOne(
+      { _id: payload.chapterId },
+      {
+        $inc: { totalQuestionsGenerated: insertedCount },
+        $set: { lastGeneratedAt: new Date() },
+      },
+    );
+  }
 
   return {
     insertedQuestionIds: insertedQuestions.map((q: any) => q._id.toString()),

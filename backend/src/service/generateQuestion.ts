@@ -427,7 +427,7 @@ Return ONLY the JSON array. Do not include markdown code blocks, explanations, o
         },
       ],
       temperature: isUsingSummary ? 0.7 : 0.1,
-      max_output_tokens: isUsingSummary ? undefined : 8000,
+      max_output_tokens: isUsingSummary ? undefined : 15000,
     });
 
     if (response) {
@@ -660,7 +660,7 @@ Return ONLY the JSON array. Do not include markdown code blocks, explanations, o
         },
       ],
       temperature: isUsingSummary ? 0.7 : 0.1,
-      max_output_tokens: isUsingSummary ? undefined : 8000,
+      max_output_tokens: isUsingSummary ? undefined : 15000,
     });
 
     if (response) {

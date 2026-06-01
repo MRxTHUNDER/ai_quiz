@@ -24,6 +24,8 @@ export default function UploadPdf() {
   const [selectedEntranceExamId, setSelectedEntranceExamId] =
     useState<string>("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [chapterName, setChapterName] = useState<string>("");
+  const [chapterNickname, setChapterNickname] = useState<string>("");
   const [topic, setTopic] = useState<string>("");
   const [numQuestions, setNumQuestions] = useState<number>(0);
   const [uploading, setUploading] = useState(false);
@@ -120,6 +122,14 @@ export default function UploadPdf() {
       return;
     }
 
+    if (!chapterName.trim()) {
+      setUploadStatus({
+        type: "error",
+        message: "Please enter chapter name",
+      });
+      return;
+    }
+
     setUploading(true);
     setUploadStatus({ type: null, message: "" });
 
@@ -163,6 +173,8 @@ export default function UploadPdf() {
         key,
         subjectId: selectedSubject,
         entranceExamId: examId,
+        chapterName: chapterName.trim(),
+        chapterNickname: chapterNickname.trim() || undefined,
         numQuestions: numQuestions > 0 ? numQuestions : undefined,
       });
 
@@ -180,6 +192,8 @@ export default function UploadPdf() {
       setSelectedFile(null);
       setSelectedSubject("");
       setSelectedEntranceExamId("");
+      setChapterName("");
+      setChapterNickname("");
       setTopic("");
       setNumQuestions(0);
       const fileInput = document.getElementById(
@@ -260,6 +274,32 @@ export default function UploadPdf() {
           </div>
 
           <div className="space-y-2">
+            <Label htmlFor="chapter-name">
+              Chapter Name <span className="text-red-500">*</span>
+            </Label>
+            <Input
+              id="chapter-name"
+              type="text"
+              value={chapterName}
+              onChange={(e) => setChapterName(e.target.value)}
+              placeholder="e.g., Class 11 Mathematics Chapter 3"
+              disabled={uploading}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="chapter-nickname">Chapter Nickname (Optional)</Label>
+            <Input
+              id="chapter-nickname"
+              type="text"
+              value={chapterNickname}
+              onChange={(e) => setChapterNickname(e.target.value)}
+              placeholder="e.g., Ch-3 quick ref"
+              disabled={uploading}
+            />
+          </div>
+
+          <div className="space-y-2">
             <Label htmlFor="file-input">PDF File</Label>
             <Input
               id="file-input"
@@ -333,6 +373,7 @@ export default function UploadPdf() {
               uploading ||
               !selectedFile ||
               !selectedSubject ||
+              !chapterName.trim() ||
               !selectedEntranceExamId ||
               loadingExams
             }

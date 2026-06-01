@@ -3,10 +3,67 @@ import { randomUUID } from "crypto";
 import { Subject } from "../models/subject.model";
 import { EntranceExam } from "../models/entranceExam.model";
 import { Pdf } from "../models/pdf.model";
+import { Chapter } from "../models/chapter.model";
 import { BackgroundJob } from "../models/backgroundJob.model";
 import { getPresignUploadUrl } from "../service/s3Service";
 import { enqueueQuestionGenerationJob } from "../queues/questionQueue";
 import { R2_WORKER_URL } from "../env";
+import { PDFDocument } from "pdf-lib";
+
+const ADMIN_MAX_PDF_SIZE_MB = 50;
+const ADMIN_MAX_PDF_PAGES = 200;
+
+const makeChapterSlug = (chapterName: string) =>
+  chapterName
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 160);
+
+const getMinimumQuestionsForPageCount = (pageCount: number) => {
+  if (pageCount >= 50) {
+    return 100;
+  }
+  if (pageCount >= 20) {
+    return 50;
+  }
+  return Math.max(20, Math.ceil(pageCount * 2));
+};
+
+const getRecommendedQuestionsForPageCount = (pageCount: number) => {
+  if (pageCount >= 50) {
+    return 110;
+  }
+  return Math.max(30, Math.ceil(pageCount * 2.2));
+};
+
+const inspectPdf = async (fileUrl: string) => {
+  const response = await fetch(fileUrl);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch uploaded PDF (${response.status})`);
+  }
+
+  const fileBuffer = Buffer.from(await response.arrayBuffer());
+  const fileSizeMB = fileBuffer.byteLength / (1024 * 1024);
+
+  if (fileSizeMB > ADMIN_MAX_PDF_SIZE_MB) {
+    throw new Error(
+      `PDF size ${fileSizeMB.toFixed(2)}MB exceeds ${ADMIN_MAX_PDF_SIZE_MB}MB limit`,
+    );
+  }
+
+  const pdfDoc = await PDFDocument.load(fileBuffer);
+  const pageCount = pdfDoc.getPageCount();
+
+  if (pageCount > ADMIN_MAX_PDF_PAGES) {
+    throw new Error(
+      `PDF has ${pageCount} pages, exceeding maximum allowed ${ADMIN_MAX_PDF_PAGES} pages`,
+    );
+  }
+
+  return { pageCount, fileSizeMB };
+};
 
 export const UploadSubjectPDF = async (req: Request, res: Response) => {
   try {
@@ -75,16 +132,21 @@ export const UploadBannerImage = async (req: Request, res: Response) => {
 
 export const TagPDF = async (req: Request, res: Response) => {
   try {
-    const { fileName, key, subjectId, entranceExamId, numQuestions } = req.body;
+    const {
+      fileName,
+      key,
+      subjectId,
+      entranceExamId,
+      chapterName,
+      chapterNickname,
+      numQuestions,
+    } = req.body;
     const userId = req.userId;
 
-    // Set default numQuestions to random value between 50-60 if not provided
-    const finalNumQuestions =
-      numQuestions || 50 + Math.floor(Math.random() * 11);
-
-    if (!fileName || !key || !subjectId || !entranceExamId) {
+    if (!fileName || !key || !subjectId || !entranceExamId || !chapterName) {
       res.status(400).json({
-        message: "fileName, key, subjectId, and entranceExamId are required",
+        message:
+          "fileName, key, subjectId, entranceExamId, and chapterName are required",
       });
       return;
     }
@@ -160,14 +222,80 @@ export const TagPDF = async (req: Request, res: Response) => {
       ? `${R2_WORKER_URL}${R2_WORKER_URL.endsWith("/") ? "" : "/"}${key}`
       : key;
 
+    const { pageCount } = await inspectPdf(finalFileUrl);
+    const minimumQuestions = getMinimumQuestionsForPageCount(pageCount);
+    const recommendedQuestions = getRecommendedQuestionsForPageCount(pageCount);
+
+    const parsedRequested = Number(numQuestions);
+    const requestedQuestions =
+      Number.isFinite(parsedRequested) && parsedRequested > 0
+        ? Math.floor(parsedRequested)
+        : recommendedQuestions;
+
+    const finalNumQuestions = Math.max(requestedQuestions, minimumQuestions);
+
+    const trimmedChapterName = String(chapterName).trim();
+    const chapterSlug = makeChapterSlug(trimmedChapterName);
+
+    if (!chapterSlug) {
+      res.status(400).json({
+        message: "chapterName is invalid",
+      });
+      return;
+    }
+
+    let chapter = await Chapter.findOne({
+      entranceExam: entranceExam._id,
+      subject: subject._id,
+      chapterSlug,
+    });
+
+    if (!chapter) {
+      chapter = await Chapter.create({
+        entranceExam: entranceExam._id,
+        subject: subject._id,
+        chapterName: trimmedChapterName,
+        chapterSlug,
+        nickname:
+          chapterNickname && String(chapterNickname).trim().length > 0
+            ? String(chapterNickname).trim()
+            : null,
+        totalQuestionsGenerated: 0,
+        totalPdfUploads: 0,
+        lastGeneratedAt: null,
+        lastUploadedAt: new Date(),
+      });
+    } else {
+      const nextNickname =
+        chapterNickname && String(chapterNickname).trim().length > 0
+          ? String(chapterNickname).trim()
+          : chapter.nickname || null;
+
+      chapter.chapterName = trimmedChapterName;
+      chapter.nickname = nextNickname;
+      chapter.lastUploadedAt = new Date();
+      await chapter.save();
+    }
+
     const pdf = await Pdf.create({
       fileName,
       fileUrl: finalFileUrl,
       key,
       subject: subject._id,
       entranceExam: entranceExam._id,
+      chapter: chapter._id,
+      chapterName: chapter.chapterName,
+      chapterNickname: chapter.nickname,
       uploadedBy: userId,
     });
+
+    await Chapter.updateOne(
+      { _id: chapter._id },
+      {
+        $inc: { totalPdfUploads: 1 },
+        $set: { lastUploadedAt: new Date() },
+      },
+    );
 
     // Update subject key if not already set
     if (!subject.key) {
@@ -185,6 +313,9 @@ export const TagPDF = async (req: Request, res: Response) => {
       subjectName: subject.subjectName,
       entranceExamId: entranceExam._id,
       entranceExamName: entranceExam.entranceExamName,
+      chapterId: chapter._id,
+      chapterName: chapter.chapterName,
+      chapterNickname: chapter.nickname || undefined,
       requestedQuestions: finalNumQuestions,
       generatedQuestions: 0,
       status: "queued",
@@ -198,6 +329,10 @@ export const TagPDF = async (req: Request, res: Response) => {
           pdfUrl: finalFileUrl,
           subjectId: subject._id.toString(),
           entranceExamId: entranceExam._id.toString(),
+          chapterId: chapter._id.toString(),
+          chapterName: chapter.chapterName,
+          chapterNickname: chapter.nickname || undefined,
+          pageCount,
           userId,
           numQuestions: finalNumQuestions,
         },
@@ -223,6 +358,14 @@ export const TagPDF = async (req: Request, res: Response) => {
       message: "PDF tagged. Question generation is queued.",
       pdf,
       jobId: externalJobId,
+      chapter: {
+        id: chapter._id,
+        chapterName: chapter.chapterName,
+        chapterNickname: chapter.nickname || null,
+        totalQuestionsGenerated: chapter.totalQuestionsGenerated || 0,
+      },
+      pageCount,
+      minimumQuestions,
       estimatedQuestions: finalNumQuestions,
     });
   } catch (error) {

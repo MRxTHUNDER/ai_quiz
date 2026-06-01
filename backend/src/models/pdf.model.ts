@@ -24,6 +24,22 @@ const pdfSchema = new Schema(
       ref: "EntranceExam",
       required: true,
     },
+    chapter: {
+      type: Schema.Types.ObjectId,
+      ref: "Chapter",
+      required: false,
+      index: true,
+    },
+    chapterName: {
+      type: String,
+      required: false,
+      trim: true,
+    },
+    chapterNickname: {
+      type: String,
+      required: false,
+      trim: true,
+    },
     uploadedBy: {
       type: Schema.Types.ObjectId,
       ref: "User",
@@ -39,6 +55,7 @@ const pdfSchema = new Schema(
 pdfSchema.index({ uploadedBy: 1 });
 pdfSchema.index({ subject: 1 });
 pdfSchema.index({ entranceExam: 1 });
+pdfSchema.index({ chapter: 1 });
 pdfSchema.index({ createdAt: -1 });
 
 export const Pdf = model("Pdf", pdfSchema);
