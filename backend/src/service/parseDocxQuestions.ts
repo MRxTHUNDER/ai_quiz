@@ -6,10 +6,15 @@ export interface ParsedDocxQuestion {
 }
 
 const QUESTION_LINE_RE = /^(\d+)\.\s+(.+)$/;
-const OPTION_LINE_RE = /^([A-D])\.\s+(.+)$/i;
+const OPTION_LINE_RE = /^([A-D])[\.\)]\s+(.+)$/i;
 const ANSWER_LINE_RE = /^(\d+)\.\s*([A-D])\s*$/i;
-const INLINE_ANSWER_RE = /^answer\s*:\s*([A-D])\s*$/i;
+const INLINE_ANSWER_RE =
+  /^(?:correct\s+)?answer\s*[:\-]\s*\(?([A-D])\)?\.?\s*$/i;
+const ANSWER_ONLY_LETTER_RE = /^([A-D])\.?\s*$/i;
 const ANSWER_KEY_HEADER_RE = /^answer\s*key\b/i;
+
+const MIN_OPTIONS = 2;
+const LOOKAHEAD_LINES = 8;
 
 const isAnswerKeyAnswerLine = (line: string): boolean => {
   const match = line.match(ANSWER_LINE_RE);
@@ -19,6 +24,34 @@ const isAnswerKeyAnswerLine = (line: string): boolean => {
 
 const letterToIndex = (letter: string): number =>
   letter.toUpperCase().charCodeAt(0) - "A".charCodeAt(0);
+
+const isOptionLine = (line: string) => OPTION_LINE_RE.test(line);
+
+const isQuestionStart = (lines: string[], index: number): boolean => {
+  const line = lines[index];
+  const questionMatch = line.match(QUESTION_LINE_RE);
+  if (!questionMatch || isAnswerKeyAnswerLine(line)) {
+    return false;
+  }
+
+  for (let j = index + 1; j < Math.min(index + LOOKAHEAD_LINES, lines.length); j++) {
+    const next = lines[j];
+
+    if (isOptionLine(next)) {
+      return true;
+    }
+
+    if (next.match(QUESTION_LINE_RE)) {
+      return false;
+    }
+
+    if (INLINE_ANSWER_RE.test(next)) {
+      return false;
+    }
+  }
+
+  return false;
+};
 
 export const parseDocxPlainText = (rawText: string): ParsedDocxQuestion[] => {
   const lines = rawText
@@ -44,19 +77,46 @@ export const parseDocxPlainText = (rawText: string): ParsedDocxQuestion[] => {
 
   const drafts: DraftQuestion[] = [];
   let current: DraftQuestion | null = null;
+  let pendingAnswerLetter = false;
 
-  const finalizeCurrent = () => {
-    if (current) {
-      drafts.push(current);
-      current = null;
-    }
+  const discardCurrent = () => {
+    current = null;
+    pendingAnswerLetter = false;
   };
 
-  for (const line of questionLines) {
+  const commitCurrentIfValid = () => {
+    if (!current || current.options.length < MIN_OPTIONS) {
+      discardCurrent();
+      return;
+    }
+
+    drafts.push(current);
+    current = null;
+    pendingAnswerLetter = false;
+  };
+
+  for (let i = 0; i < questionLines.length; i++) {
+    const line = questionLines[i];
+
+    if (pendingAnswerLetter && current) {
+      const letterMatch = line.match(ANSWER_ONLY_LETTER_RE);
+      if (letterMatch) {
+        current.answerLetter = letterMatch[1].toUpperCase();
+        commitCurrentIfValid();
+        continue;
+      }
+      pendingAnswerLetter = false;
+    }
+
     const inlineAnswerMatch = line.match(INLINE_ANSWER_RE);
     if (inlineAnswerMatch && current) {
       current.answerLetter = inlineAnswerMatch[1].toUpperCase();
-      finalizeCurrent();
+      commitCurrentIfValid();
+      continue;
+    }
+
+    if (/^answer\s*:?\s*$/i.test(line) && current) {
+      pendingAnswerLetter = true;
       continue;
     }
 
@@ -70,26 +130,23 @@ export const parseDocxPlainText = (rawText: string): ParsedDocxQuestion[] => {
       continue;
     }
 
+    if (!isQuestionStart(questionLines, i)) {
+      continue;
+    }
+
     const questionMatch = line.match(QUESTION_LINE_RE);
     if (!questionMatch) continue;
 
-    const questionNumber = Number(questionMatch[1]);
-    const questionText = questionMatch[2].trim();
-
-    if (isAnswerKeyAnswerLine(line)) continue;
-
-    finalizeCurrent();
+    commitCurrentIfValid();
 
     current = {
-      questionNumber,
-      questionsText: questionText,
+      questionNumber: Number(questionMatch[1]),
+      questionsText: questionMatch[2].trim(),
       options: [],
     };
   }
 
-  if (current) {
-    drafts.push(current);
-  }
+  commitCurrentIfValid();
 
   const answers = new Map<number, string>();
   for (const line of answerLines) {
@@ -101,7 +158,7 @@ export const parseDocxPlainText = (rawText: string): ParsedDocxQuestion[] => {
   const results: ParsedDocxQuestion[] = [];
 
   for (const draft of drafts) {
-    if (!draft.questionsText || draft.options.length < 2) {
+    if (!draft.questionsText || draft.options.length < MIN_OPTIONS) {
       continue;
     }
 
