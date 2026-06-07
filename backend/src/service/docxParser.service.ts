@@ -37,19 +37,34 @@ const extractPlainTextFromDocx = async (buffer: Buffer): Promise<string> => {
 export const extractQuestionsFromDocxBuffer = async (
   buffer: Buffer,
 ): Promise<ParsedDocxQuestion[]> => {
+  console.log("[docx-import] Extracting text from DOCX...");
+
   const rawText = await extractPlainTextFromDocx(buffer);
 
   if (!rawText.trim()) {
+    console.error("[docx-import] Failed: DOCX contains no readable text");
     throw new Error("DOCX file contains no readable text");
   }
 
+  const lineCount = normalizeDocxText(rawText)
+    .split("\n")
+    .filter((line) => line.trim().length > 0).length;
+  console.log(`[docx-import] Extracted ${lineCount} non-empty lines`);
+
   let questions = parseDocxPlainText(rawText);
+  console.log(`[docx-import] Parsed ${questions.length} questions from raw text`);
 
   if (!questions.length) {
+    console.log("[docx-import] Raw text parse failed, trying HTML fallback...");
     const htmlResult = await mammoth.convertToHtml({ buffer });
     const htmlText = htmlToPlainLines(htmlResult.value || "");
     if (htmlText.trim() && htmlText !== normalizeDocxText(rawText)) {
       questions = parseDocxPlainText(htmlText);
+      console.log(
+        `[docx-import] Parsed ${questions.length} questions from HTML fallback`,
+      );
+    } else {
+      console.log("[docx-import] HTML fallback skipped (same or empty text)");
     }
   }
 
@@ -58,10 +73,14 @@ export const extractQuestionsFromDocxBuffer = async (
       .map((line) => `- ${line.slice(0, 120)}`)
       .join("\n");
 
+    console.error("[docx-import] Failed: no questions parsed. First lines:");
+    console.error(preview);
+
     throw new Error(
       `No questions could be parsed. Ensure each question has options A–D and either "Answer: C" or an Answer Key at the end.\nFirst lines seen:\n${preview}`,
     );
   }
 
+  console.log(`[docx-import] Success: ${questions.length} questions ready to import`);
   return questions;
 };

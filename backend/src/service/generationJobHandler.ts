@@ -274,6 +274,8 @@ const handleDocxImportJob = async (
   externalJobId: string,
   runStartedAt: Date,
 ): Promise<HandlerResult> => {
+  console.log(`[docx-import] Job ${externalJobId} started (${payload.fileName})`);
+
   const docxBuffer = await getObjectBufferFromS3(payload.docxKey);
   const parsedQuestions = await extractQuestionsFromDocxBuffer(docxBuffer);
 
@@ -287,8 +289,19 @@ const handleDocxImportJob = async (
     payload.subjectId,
   );
 
+  const skippedDuplicates = parsedQuestions.length - newQuestions.length;
+  if (skippedDuplicates > 0) {
+    console.log(
+      `[docx-import] Skipped ${skippedDuplicates} duplicate question(s) already in DB`,
+    );
+  }
+
   const insertedQuestions = await saveQuestions(newQuestions, payload);
   const insertedCount = insertedQuestions.length;
+
+  console.log(
+    `[docx-import] Job ${externalJobId} done: parsed=${parsedQuestions.length}, inserted=${insertedCount}`,
+  );
 
   await BackgroundJob.findOneAndUpdate({ externalJobId }, {
     $set: {
