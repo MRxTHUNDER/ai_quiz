@@ -17,7 +17,7 @@ export const extractQuestionsFromDocxBuffer = async (
 
   if (!questions.length) {
     throw new Error(
-      "No questions could be parsed. Ensure the file has numbered questions (1. ...), options (A. ...), and an Answer Key section at the end.",
+      "No questions could be parsed. Use numbered questions (1. ...), options (A. ...), then either Answer: C after each question or an Answer Key section at the end.",
     );
   }
 

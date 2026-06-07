@@ -822,9 +822,8 @@ export default function Questions() {
             <CardHeader>
               <CardTitle className="text-xl">Upload Questions</CardTitle>
               <CardDescription className="text-base">
-                Upload a DOCX file with numbered MCQs and an Answer Key section
-                at the end. Questions are imported into the selected exam and
-                subject.
+                Upload a DOCX file with numbered MCQs. Questions are imported
+                into the selected exam and subject.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6 text-base">
@@ -897,8 +896,8 @@ export default function Questions() {
                   </p>
                 )}
                 <p className="text-sm text-muted-foreground">
-                  Format: numbered questions (1. ...), options A–D on separate
-                  lines, then an &quot;Answer Key&quot; section (e.g. 1. B, 2. C).
+                  Supported formats: (1) Answer Key at end — 1. B, 2. C… or (2)
+                  inline answer after each question — Answer: C
                 </p>
               </div>
 

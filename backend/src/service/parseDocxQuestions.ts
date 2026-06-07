@@ -8,6 +8,7 @@ export interface ParsedDocxQuestion {
 const QUESTION_LINE_RE = /^(\d+)\.\s+(.+)$/;
 const OPTION_LINE_RE = /^([A-D])\.\s+(.+)$/i;
 const ANSWER_LINE_RE = /^(\d+)\.\s*([A-D])\s*$/i;
+const INLINE_ANSWER_RE = /^answer\s*:\s*([A-D])\s*$/i;
 const ANSWER_KEY_HEADER_RE = /^answer\s*key\b/i;
 
 const isAnswerKeyAnswerLine = (line: string): boolean => {
@@ -38,12 +39,27 @@ export const parseDocxPlainText = (rawText: string): ParsedDocxQuestion[] => {
     questionNumber: number;
     questionsText: string;
     options: { letter: string; text: string }[];
+    answerLetter?: string;
   };
 
   const drafts: DraftQuestion[] = [];
   let current: DraftQuestion | null = null;
 
+  const finalizeCurrent = () => {
+    if (current) {
+      drafts.push(current);
+      current = null;
+    }
+  };
+
   for (const line of questionLines) {
+    const inlineAnswerMatch = line.match(INLINE_ANSWER_RE);
+    if (inlineAnswerMatch && current) {
+      current.answerLetter = inlineAnswerMatch[1].toUpperCase();
+      finalizeCurrent();
+      continue;
+    }
+
     const optionMatch = line.match(OPTION_LINE_RE);
     if (optionMatch) {
       if (!current) continue;
@@ -62,9 +78,7 @@ export const parseDocxPlainText = (rawText: string): ParsedDocxQuestion[] => {
 
     if (isAnswerKeyAnswerLine(line)) continue;
 
-    if (current) {
-      drafts.push(current);
-    }
+    finalizeCurrent();
 
     current = {
       questionNumber,
@@ -92,7 +106,8 @@ export const parseDocxPlainText = (rawText: string): ParsedDocxQuestion[] => {
     }
 
     const options = draft.options.map((o) => o.text);
-    const answerLetter = answers.get(draft.questionNumber);
+    const answerLetter =
+      draft.answerLetter || answers.get(draft.questionNumber);
 
     if (!answerLetter) {
       continue;
