@@ -24,6 +24,45 @@ interface HandlerResult {
   insertedQuestionIds: string[];
 }
 
+const normalizeQuestionText = (text: string | undefined | null) =>
+  (text || "").trim().toLowerCase();
+
+const dedupeQuestionsForSubject = async (
+  questions: any[],
+  subjectId: string,
+  seenInBatch: Set<string> = new Set(),
+) => {
+  const existing = await QuestionModel.find({ SubjectId: subjectId }).select(
+    "questionsText",
+  );
+
+  const existingTexts = new Set(
+    existing
+      .map((q: any) => normalizeQuestionText(q.questionsText))
+      .filter((t) => t.length > 0),
+  );
+
+  const result: any[] = [];
+
+  for (const q of questions) {
+    const key = normalizeQuestionText(q.questionsText);
+    if (!key) {
+      result.push(q);
+      continue;
+    }
+    if (existingTexts.has(key)) {
+      continue;
+    }
+    if (seenInBatch.has(key)) {
+      continue;
+    }
+    seenInBatch.add(key);
+    result.push(q);
+  }
+
+  return result;
+};
+
 const saveQuestions = async (
   questions: any[],
   payload: {
@@ -150,45 +189,13 @@ export const handleQuestionGenerationJob = async (
   // - If, after dedupe, we still have fewer than payload.numQuestions, repeat
   //   subject-knowledge generation until we reach the target or stall (capped).
   if (generatedQuestions.length) {
-    // Normalize text helper
-    const normalizeText = (text: string | undefined | null) =>
-      (text || "").trim().toLowerCase();
-
-    // Fetch existing questions for this subject
-    const existing = await QuestionModel.find({
-      SubjectId: payload.subjectId,
-    }).select("questionsText");
-
-    const existingTexts = new Set(
-      existing
-        .map((q: any) => normalizeText(q.questionsText))
-        .filter((t) => t.length > 0),
-    );
-
     const seenInBatch = new Set<string>();
 
-    const dedupeList = (list: any[]) => {
-      const result: any[] = [];
-      for (const q of list) {
-        const key = normalizeText(q.questionsText);
-        if (!key) {
-          result.push(q);
-          continue;
-        }
-        if (existingTexts.has(key)) {
-          continue; // already in DB for this subject
-        }
-        if (seenInBatch.has(key)) {
-          continue; // duplicate within this generation run
-        }
-        seenInBatch.add(key);
-        result.push(q);
-      }
-      return result;
-    };
-
-    // First dedupe the initially generated questions
-    generatedQuestions = dedupeList(generatedQuestions);
+    generatedQuestions = await dedupeQuestionsForSubject(
+      generatedQuestions,
+      payload.subjectId,
+      seenInBatch,
+    );
 
     const requestedTotal =
       payload.numQuestions || generatedQuestions.length;
@@ -212,7 +219,11 @@ export const handleQuestionGenerationJob = async (
           break;
         }
 
-        const extraDeduped = dedupeList(extraRaw);
+        const extraDeduped = await dedupeQuestionsForSubject(
+          extraRaw,
+          payload.subjectId,
+          seenInBatch,
+        );
         if (!extraDeduped.length) {
           break;
         }
@@ -271,7 +282,12 @@ const handleDocxImportJob = async (
     { $set: { requestedQuestions: parsedQuestions.length } },
   );
 
-  const insertedQuestions = await saveQuestions(parsedQuestions, payload);
+  const newQuestions = await dedupeQuestionsForSubject(
+    parsedQuestions,
+    payload.subjectId,
+  );
+
+  const insertedQuestions = await saveQuestions(newQuestions, payload);
   const insertedCount = insertedQuestions.length;
 
   await BackgroundJob.findOneAndUpdate({ externalJobId }, {
