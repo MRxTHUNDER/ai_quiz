@@ -5,16 +5,28 @@ export interface ParsedDocxQuestion {
   correctOption: string;
 }
 
-const QUESTION_LINE_RE = /^(\d+)\.\s+(.+)$/;
-const OPTION_LINE_RE = /^([A-D])[\.\)]\s+(.+)$/i;
-const ANSWER_LINE_RE = /^(\d+)\.\s*([A-D])\s*$/i;
+const QUESTION_LINE_RE = /^(\d+)[\.\)]\s+(.+)$/;
+const OPTION_LINE_RE =
+  /^([A-D])[\.\)\:][\s\u00A0\t]+(.+)$|^([A-D])[\s\u00A0\t]+(.+)$/i;
+const ANSWER_LINE_RE = /^(\d+)[\.\)]\s*([A-D])\s*$/i;
 const INLINE_ANSWER_RE =
-  /^(?:correct\s+)?answer\s*[:\-]\s*\(?([A-D])\)?\.?\s*$/i;
+  /^(?:correct\s+)?answer[\s\u00A0]*[:\-][\s\u00A0]*\(?([A-D])\)?\.?\s*$/i;
 const ANSWER_ONLY_LETTER_RE = /^([A-D])\.?\s*$/i;
-const ANSWER_KEY_HEADER_RE = /^answer\s*key\b/i;
+const ANSWER_KEY_HEADER_RE = /^answer[\s\u00A0]*key\b/i;
 
 const MIN_OPTIONS = 2;
-const LOOKAHEAD_LINES = 8;
+const MIN_QUESTION_TEXT_LENGTH = 5;
+const LOOKAHEAD_LINES = 12;
+
+export const normalizeDocxText = (rawText: string): string =>
+  rawText
+    .replace(/\u00A0/g, " ")
+    .replace(/[\u2018\u2019\u2032]/g, "'")
+    .replace(/[\u201C\u201D\u2033]/g, '"')
+    .replace(/\uFF1A/g, ":")
+    .replace(/[\u2013\u2014]/g, "-")
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n");
 
 const isAnswerKeyAnswerLine = (line: string): boolean => {
   const match = line.match(ANSWER_LINE_RE);
@@ -25,7 +37,33 @@ const isAnswerKeyAnswerLine = (line: string): boolean => {
 const letterToIndex = (letter: string): number =>
   letter.toUpperCase().charCodeAt(0) - "A".charCodeAt(0);
 
-const isOptionLine = (line: string) => OPTION_LINE_RE.test(line);
+const parseOptionLine = (
+  line: string,
+): { letter: string; text: string } | null => {
+  const match = line.match(OPTION_LINE_RE);
+  if (!match) return null;
+
+  const letter = (match[1] || match[3] || "").toUpperCase();
+  const text = (match[2] || match[4] || "").trim();
+  if (!letter || !text) return null;
+
+  return { letter, text };
+};
+
+const isOptionLine = (line: string) => parseOptionLine(line) !== null;
+
+const stripLeadingNumber = (line: string): string => {
+  const numbered = line.match(QUESTION_LINE_RE);
+  return numbered ? numbered[2].trim() : line.trim();
+};
+
+const isSkippableContextLine = (line: string): boolean => {
+  if (/^themes?\s*:?\s*$/i.test(line)) return true;
+  if (/^chapter\s+\d+/i.test(line)) return true;
+  if (/^\d+\s+cuet\s+mcqs/i.test(line)) return true;
+  if (line.length > 220 && !line.includes("?")) return true;
+  return false;
+};
 
 const isQuestionStart = (lines: string[], index: number): boolean => {
   const line = lines[index];
@@ -34,7 +72,11 @@ const isQuestionStart = (lines: string[], index: number): boolean => {
     return false;
   }
 
-  for (let j = index + 1; j < Math.min(index + LOOKAHEAD_LINES, lines.length); j++) {
+  for (
+    let j = index + 1;
+    j < Math.min(index + LOOKAHEAD_LINES, lines.length);
+    j++
+  ) {
     const next = lines[j];
 
     if (isOptionLine(next)) {
@@ -54,8 +96,8 @@ const isQuestionStart = (lines: string[], index: number): boolean => {
 };
 
 export const parseDocxPlainText = (rawText: string): ParsedDocxQuestion[] => {
-  const lines = rawText
-    .split(/\r?\n/)
+  const lines = normalizeDocxText(rawText)
+    .split("\n")
     .map((line) => line.trim())
     .filter((line) => line.length > 0);
 
@@ -76,74 +118,98 @@ export const parseDocxPlainText = (rawText: string): ParsedDocxQuestion[] => {
   };
 
   const drafts: DraftQuestion[] = [];
-  let current: DraftQuestion | null = null;
-  let pendingAnswerLetter = false;
+  const state = {
+    current: null as DraftQuestion | null,
+    pendingAnswerLetter: false,
+    pendingQuestionText: null as string | null,
+    autoQuestionNumber: 1,
+  };
 
   const discardCurrent = () => {
-    current = null;
-    pendingAnswerLetter = false;
+    state.current = null;
+    state.pendingAnswerLetter = false;
   };
 
   const commitCurrentIfValid = () => {
-    if (!current || current.options.length < MIN_OPTIONS) {
+    if (!state.current || state.current.options.length < MIN_OPTIONS) {
       discardCurrent();
       return;
     }
 
-    drafts.push(current);
-    current = null;
-    pendingAnswerLetter = false;
+    drafts.push(state.current);
+    state.current = null;
+    state.pendingAnswerLetter = false;
+  };
+
+  const startQuestion = (questionText: string, questionNumber?: number) => {
+    const cleaned = stripLeadingNumber(questionText);
+    if (cleaned.length < MIN_QUESTION_TEXT_LENGTH) {
+      return;
+    }
+
+    commitCurrentIfValid();
+
+    state.current = {
+      questionNumber: questionNumber ?? state.autoQuestionNumber++,
+      questionsText: cleaned,
+      options: [],
+    };
+    state.pendingQuestionText = null;
   };
 
   for (let i = 0; i < questionLines.length; i++) {
     const line = questionLines[i];
 
-    if (pendingAnswerLetter && current) {
+    if (state.pendingAnswerLetter && state.current) {
       const letterMatch = line.match(ANSWER_ONLY_LETTER_RE);
       if (letterMatch) {
-        current.answerLetter = letterMatch[1].toUpperCase();
+        state.current.answerLetter = letterMatch[1].toUpperCase();
         commitCurrentIfValid();
         continue;
       }
-      pendingAnswerLetter = false;
+      state.pendingAnswerLetter = false;
     }
 
     const inlineAnswerMatch = line.match(INLINE_ANSWER_RE);
-    if (inlineAnswerMatch && current) {
-      current.answerLetter = inlineAnswerMatch[1].toUpperCase();
+    if (inlineAnswerMatch && state.current) {
+      state.current.answerLetter = inlineAnswerMatch[1].toUpperCase();
       commitCurrentIfValid();
       continue;
     }
 
-    if (/^answer\s*:?\s*$/i.test(line) && current) {
-      pendingAnswerLetter = true;
+    if (/^answer[\s\u00A0]*:?\s*$/i.test(line) && state.current) {
+      state.pendingAnswerLetter = true;
       continue;
     }
 
-    const optionMatch = line.match(OPTION_LINE_RE);
-    if (optionMatch) {
-      if (!current) continue;
-      current.options.push({
-        letter: optionMatch[1].toUpperCase(),
-        text: optionMatch[2].trim(),
-      });
+    const option = parseOptionLine(line);
+    if (option) {
+      if (!state.current && option.letter === "A" && state.pendingQuestionText) {
+        startQuestion(state.pendingQuestionText);
+      }
+
+      if (state.current) {
+        state.current.options.push(option);
+      }
       continue;
     }
 
-    if (!isQuestionStart(questionLines, i)) {
+    if (isQuestionStart(questionLines, i)) {
+      const questionMatch = line.match(QUESTION_LINE_RE);
+      if (questionMatch) {
+        startQuestion(questionMatch[2], Number(questionMatch[1]));
+      }
       continue;
     }
 
-    const questionMatch = line.match(QUESTION_LINE_RE);
-    if (!questionMatch) continue;
-
-    commitCurrentIfValid();
-
-    current = {
-      questionNumber: Number(questionMatch[1]),
-      questionsText: questionMatch[2].trim(),
-      options: [],
-    };
+    if (
+      !isSkippableContextLine(line) &&
+      !INLINE_ANSWER_RE.test(line) &&
+      !isAnswerKeyAnswerLine(line) &&
+      !/^answer[\s\u00A0]*:?\s*$/i.test(line)
+    ) {
+      state.pendingQuestionText = line;
+    }
   }
 
   commitCurrentIfValid();
@@ -187,3 +253,10 @@ export const parseDocxPlainText = (rawText: string): ParsedDocxQuestion[] => {
 
   return results;
 };
+
+export const getParsePreviewLines = (rawText: string, limit = 15): string[] =>
+  normalizeDocxText(rawText)
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .slice(0, limit);
