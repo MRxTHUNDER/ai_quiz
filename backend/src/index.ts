@@ -15,6 +15,7 @@ import { UploadDocxRouter } from "./routes/uploadDocx.routes";
 import { UserRouter } from "./routes/user.routes";
 import { UIFlagsRouter } from "./routes/uiFlags.routes";
 import { JobRouter } from "./routes/job.routes";
+import { AuthRouter } from "./routes/auth.routes";
 import {
   NODE_ENV,
   PORT,
@@ -59,6 +60,7 @@ app.use("/api/v1/upload/docx", UploadDocxRouter);
 app.use("/api/v1/dev", DevRouter);
 app.use("/api/v1/ui-flags", UIFlagsRouter);
 app.use("/api/v1/jobs", JobRouter);
+app.use("/api/v1/auth", AuthRouter);
 
 const bootstrap = async () => {
   validateRequiredEnvVars();

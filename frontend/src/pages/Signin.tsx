@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { Zap, Mail, Lock } from "lucide-react";
 import Button from "../components/Button";
 import { useAuthStore } from "../store/useAuthStore";
+import { axiosInstance } from "../lib/axio";
 
 function Signin() {
   const [formData, setFormData] = useState({
@@ -11,6 +12,12 @@ function Signin() {
   });
 
   const { login, isLoggingIn } = useAuthStore();
+  const [forgotPassword, setForgotPassword] = useState(false);
+  const [resetOtp, setResetOtp] = useState("");
+  const [resetNewPassword, setResetNewPassword] = useState("");
+  const [otpSent, setOtpSent] = useState(false);
+  const [resetMessage, setResetMessage] = useState("");
+  const [resetLoading, setResetLoading] = useState(false);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -23,6 +30,33 @@ function Signin() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     await login(formData);
+  };
+
+  const handlePasswordReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setResetLoading(true);
+    setResetMessage("");
+    try {
+      await axiosInstance.post("/auth/password-reset", {
+        email: formData.email,
+        role: "user",
+        ...(otpSent ? { otp: resetOtp, newPassword: resetNewPassword } : {}),
+      });
+      if (otpSent) {
+        setResetMessage("Password reset successfully. You can now sign in.");
+        setForgotPassword(false);
+        setOtpSent(false);
+        setResetOtp("");
+        setResetNewPassword("");
+      } else {
+        setOtpSent(true);
+        setResetMessage("Email exists. An OTP was sent to your email.");
+      }
+    } catch (err: any) {
+      setResetMessage(err.response?.data?.message || "Unable to reset password");
+    } finally {
+      setResetLoading(false);
+    }
   };
 
   return (
@@ -54,7 +88,19 @@ function Signin() {
 
         {/* Form */}
         <div className="bg-white rounded-xl shadow-lg p-8">
-          <form className="space-y-6" onSubmit={handleSubmit}>
+          {forgotPassword ? (
+            <form className="space-y-6" onSubmit={handlePasswordReset}>
+              <p className="text-sm text-gray-600">Enter your email to receive an OTP.</p>
+              <input type="email" required value={formData.email} onChange={handleInputChange} name="email" placeholder="Email address" className="block w-full px-3 py-3 border border-gray-300 rounded-lg" />
+              {otpSent && <>
+                <input required value={resetOtp} onChange={(e) => setResetOtp(e.target.value)} placeholder="6-digit OTP" className="block w-full px-3 py-3 border border-gray-300 rounded-lg" />
+                <input required minLength={6} type="password" value={resetNewPassword} onChange={(e) => setResetNewPassword(e.target.value)} placeholder="New password" className="block w-full px-3 py-3 border border-gray-300 rounded-lg" />
+              </>}
+              {resetMessage && <p className="text-sm text-blue-600">{resetMessage}</p>}
+              <Button type="submit" variant="primary" size="lg" className="w-full" disabled={resetLoading}>{resetLoading ? "Please wait..." : otpSent ? "Reset Password" : "Send OTP"}</Button>
+              <button type="button" onClick={() => { setForgotPassword(false); setResetMessage(""); }} className="w-full text-sm text-blue-600">Back to sign in</button>
+            </form>
+          ) : <form className="space-y-6" onSubmit={handleSubmit}>
             {/* Email */}
             <div>
               <label
@@ -118,7 +164,8 @@ function Signin() {
                 {isLoggingIn ? "Signing In..." : "Sign In"}
               </Button>
             </div>
-          </form>
+            <button type="button" onClick={() => setForgotPassword(true)} className="text-sm text-blue-600 hover:text-blue-500">Forgot password?</button>
+          </form>}
         </div>
       </div>
     </div>

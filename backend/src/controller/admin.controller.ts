@@ -80,6 +80,7 @@ export const AdminSignup = async (req: Request, res: Response) => {
         NODE_ENV === "production"
           ? COOKIE_DOMAIN 
           : undefined,
+      path: "/",
     });
 
     res.status(200).json({
@@ -168,6 +169,7 @@ export const AdminSignin = async (req: Request, res: Response) => {
         NODE_ENV === "production"
           ? COOKIE_DOMAIN 
           : undefined,
+      path: "/",
     });
 
     res.status(200).json({
@@ -191,12 +193,24 @@ export const AdminSignin = async (req: Request, res: Response) => {
 
 export const AdminLogout = async (req: Request, res: Response) => {
   try {
-    res.clearCookie("adminToken");
+    console.log("[admin-logout] clearing admin cookie", {
+      nodeEnv: NODE_ENV,
+      domainConfigured: Boolean(COOKIE_DOMAIN),
+    });
+    // Cookie attributes must match the attributes used when the token was set.
+    // In production the domain is configured explicitly, so omitting it would
+    // leave the original domain-scoped cookie in the browser.
+    res.clearCookie("adminToken", {
+      domain: NODE_ENV === "production" ? COOKIE_DOMAIN : undefined,
+      path: "/",
+    });
 
     res.status(200).json({
       message: "Logged out successfully",
     });
+    console.log("[admin-logout] completed");
   } catch (err) {
+    console.error("[admin-logout] failed", err);
     res.status(500).json({
       message: "Error during logout",
     });

@@ -74,6 +74,5 @@ export const useAuthStore = create<any>((set) => ({
   logout: async () => {
     await axiosInstance.post("/admin/logout");
     set({ authUser: null });
-    window.location.href = "/login";
   },
 }));

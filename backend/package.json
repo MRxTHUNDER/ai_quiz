@@ -37,6 +37,7 @@
     "jsonwebtoken": "^9.0.2",
     "mammoth": "^1.12.0",
     "mongoose": "^8.18.1",
+    "nodemailer": "^7.0.9",
     "multer": "^2.0.2",
     "openai": "^5.23.1",
     "pdf-lib": "^1.17.1",
@@ -48,6 +49,7 @@
     "zod": "^4.1.8"
   },
   "devDependencies": {
+    "@types/nodemailer": "^7.0.2",
     "@types/string-similarity": "^4.0.2"
   }
 }
